@@ -1,4 +1,4 @@
-// ===================== FIREBASE INIT (Auth + Firestore realtime sync) =====================
+// ===================== FIREBASE INIT (Auth + Firestore realtime sync, per-user data) =====================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
@@ -19,7 +19,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const STATE_DOC = doc(db, "posData", "main");
+
+// পুরনো শেয়ার্ড ডেটা (মাইগ্রেশনের জন্য সাময়িক) — সবাই আগে এই একটাই ডকুমেন্ট শেয়ার করত
+const SHARED_STATE_DOC = doc(db, "posData", "main");
+
+function stateDocFor(uid){
+  return doc(db, "posData", uid);
+}
 
 window.Firebase = {
   login(email, password){
@@ -31,21 +37,29 @@ window.Firebase = {
   onAuthChange(cb){
     onAuthStateChanged(auth, cb);
   },
-  async loadState(){
-    const snap = await getDoc(STATE_DOC);
+  // প্রতি ইউজারের নিজের ডেটা — uid অনুযায়ী আলাদা ডকুমেন্ট
+  async loadState(uid){
+    const snap = await getDoc(stateDocFor(uid));
     return snap.exists() ? snap.data().data : null;
   },
-  async saveState(stateObj){
+  async saveState(uid, stateObj){
+    if(!uid) return;
     try{
-      await setDoc(STATE_DOC, { data: stateObj, updatedAt: Date.now() });
+      await setDoc(stateDocFor(uid), { data: stateObj, updatedAt: Date.now() });
     }catch(e){
       console.warn('Firestore save failed', e);
     }
   },
-  watchState(cb){
-    return onSnapshot(STATE_DOC, (snap)=>{
+  watchState(uid, cb){
+    if(!uid) return null;
+    return onSnapshot(stateDocFor(uid), (snap)=>{
       if(snap.exists()) cb(snap.data().data);
     });
+  },
+  // ===== সাময়িক: পুরনো শেয়ার্ড ডেটা মাইগ্রেশনের জন্য =====
+  async loadSharedState(){
+    const snap = await getDoc(SHARED_STATE_DOC);
+    return snap.exists() ? snap.data().data : null;
   }
 };
 

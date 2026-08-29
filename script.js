@@ -114,12 +114,12 @@ function showPromptDialog(message, defaultValue='', opts={}){
 
 function defaultState(){
   const products = [
-    {id:uid(), emoji:'🍚', name:'Miniket Rice 5kg', sku:'RC-5001', purchase:320, sell:350, stock:24},
-    {id:uid(), emoji:'🧴', name:'Soybean Oil 2L',   sku:'OL-2002', purchase:165, sell:180, stock:18},
-    {id:uid(), emoji:'🧼', name:'Lux Soap',          sku:'SP-0065', purchase:55,  sell:65,  stock:12},
-    {id:uid(), emoji:'🍪', name:'Family Biscuit',    sku:'BS-0080', purchase:65,  sell:80,  stock:31},
-    {id:uid(), emoji:'🥤', name:'Coca Cola 1L',      sku:'CC-0120', purchase:100, sell:120, stock:20},
-    {id:uid(), emoji:'🧴', name:'Shampoo',           sku:'SH-0250', purchase:210, sell:250, stock:9},
+    {id:uid(), emoji:'🍚', name:'Miniket Rice 5kg', sku:'RC-5001', category:'মুদি পণ্য', purchase:320, sell:350, stock:24},
+    {id:uid(), emoji:'🧴', name:'Soybean Oil 2L',   sku:'OL-2002', category:'মুদি পণ্য', purchase:165, sell:180, stock:18},
+    {id:uid(), emoji:'🧼', name:'Lux Soap',          sku:'SP-0065', category:'কসমেটিকস', purchase:55,  sell:65,  stock:12},
+    {id:uid(), emoji:'🍪', name:'Family Biscuit',    sku:'BS-0080', category:'স্ন্যাকস', purchase:65,  sell:80,  stock:31},
+    {id:uid(), emoji:'🥤', name:'Coca Cola 1L',      sku:'CC-0120', category:'পানীয়', purchase:100, sell:120, stock:20},
+    {id:uid(), emoji:'🧴', name:'Shampoo',           sku:'SH-0250', category:'কসমেটিকস', purchase:210, sell:250, stock:9},
   ];
   return {
     invoiceCounter: 1026,
@@ -162,9 +162,25 @@ function defaultState(){
 let state = defaultState(); // placeholder — real data loads from Firestore after login
 let unsubscribeState = null;
 let isRemoteUpdate = false;
+let currentUid = null;
 function save(){
-  if(isRemoteUpdate) return; // avoid re-saving data we just received from Firestore
-  if(window.Firebase) window.Firebase.saveState(state);
+  if(isRemoteUpdate || !currentUid) return; // avoid re-saving remote data, or saving before login
+  if(window.Firebase) window.Firebase.saveState(currentUid, state);
+}
+function emptyState(){
+  return {
+    invoiceCounter: 1,
+    products: [],
+    customers: [],
+    ledger: [],
+    cash: [],
+    purchases: [],
+    returns: [],
+    purchaseReturns: [],
+    sales: [],
+    users: [{id:uid(), name:'Admin User', role:'Admin'}],
+    settings: {storeName:'আমার দোকান', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0},
+  };
 }
 async function resetDemoData(){
   const ok = await showConfirmDialog('সব ডেটা মুছে ডেমো ডেটা দিয়ে আবার শুরু করতে চাও?', {danger:true, icon:'⚠️', okLabel:'হ্যাঁ, রিসেট করো', title:'ডেমো ডেটা রিসেট'});
@@ -466,7 +482,7 @@ function renderProductsTable(){
   body.innerHTML = state.products.map(p=>{
     const statusHtml = p.stock<=8 ? `<span class="danger">Low stock</span>` : `<span class="pill">In stock</span>`;
     return `<tr>
-      <td>${p.emoji} ${p.name}</td><td>${p.sku}</td><td>${fmt(p.purchase)}</td><td>${fmt(p.sell)}</td><td>${p.stock}</td><td>${statusHtml}</td>
+      <td>${p.emoji} ${p.name}</td><td>${p.sku}</td><td>${p.category||'সাধারণ'}</td><td>${fmt(p.purchase)}</td><td>${fmt(p.sell)}</td><td>${p.stock}</td><td>${statusHtml}</td>
       <td style="white-space:nowrap"><button class="link" onclick="openEditProduct('${p.id}')">Edit</button> <button class="link" onclick="printBarcodeLabel('${p.id}')">🏷️ Label</button> <button class="link danger" onclick="deleteProduct('${p.id}')">Delete</button></td>
     </tr>`;
   }).join('');
@@ -482,12 +498,13 @@ function openAddProduct(){
     {id:'emoji', label:'Emoji/Icon', value:'📦'},
     {id:'name', label:'Product Name', value:''},
     {id:'sku', label:'SKU / Barcode', value:''},
+    {id:'category', label:'Category', value:'সাধারণ'},
     {id:'purchase', label:'Purchase Price', type:'number', value:0},
     {id:'sell', label:'Sell Price', type:'number', value:0},
     {id:'stock', label:'Opening Stock', type:'number', value:0},
   ], (v)=>{
     if(!v.name.trim()){ showAlertDialog('প্রোডাক্টের নাম দিন।'); return false; }
-    state.products.push({id:uid(), emoji:v.emoji||'📦', name:v.name, sku:v.sku||('SKU-'+Math.floor(Math.random()*9000+1000)), purchase:+v.purchase||0, sell:+v.sell||0, stock:+v.stock||0});
+    state.products.push({id:uid(), emoji:v.emoji||'📦', name:v.name, sku:v.sku||('SKU-'+Math.floor(Math.random()*9000+1000)), category:v.category||'সাধারণ', purchase:+v.purchase||0, sell:+v.sell||0, stock:+v.stock||0});
     save(); renderProductsTable(); renderPOSGrid(); renderDashboard();
   });
 }
@@ -498,11 +515,12 @@ function openEditProduct(id){
     {id:'emoji', label:'Emoji/Icon', value:p.emoji},
     {id:'name', label:'Product Name', value:p.name},
     {id:'sku', label:'SKU / Barcode', value:p.sku},
+    {id:'category', label:'Category', value:p.category||'সাধারণ'},
     {id:'purchase', label:'Purchase Price', type:'number', value:p.purchase},
     {id:'sell', label:'Sell Price', type:'number', value:p.sell},
     {id:'stock', label:'Stock', type:'number', value:p.stock},
   ], (v)=>{
-    p.emoji=v.emoji; p.name=v.name; p.sku=v.sku; p.purchase=+v.purchase||0; p.sell=+v.sell||0; p.stock=+v.stock||0;
+    p.emoji=v.emoji; p.name=v.name; p.sku=v.sku; p.category=v.category||'সাধারণ'; p.purchase=+v.purchase||0; p.sell=+v.sell||0; p.stock=+v.stock||0;
     save(); renderProductsTable(); renderPOSGrid(); renderDashboard();
   });
 }
@@ -698,10 +716,46 @@ async function processReturn(invoice, itemIndex){
 }
 
 /* ===================== REPORTS ===================== */
+function getReportDateRange(){
+  const fromStr = (document.getElementById('reportFrom')||{}).value;
+  const toStr = (document.getElementById('reportTo')||{}).value;
+  const from = fromStr ? new Date(fromStr+'T00:00:00') : null;
+  const to = toStr ? new Date(toStr+'T23:59:59') : null;
+  return {from, to};
+}
+function saleInRange(s, from, to){
+  const d = new Date(s.date);
+  if(isNaN(d)) return true;
+  if(from && d < from) return false;
+  if(to && d > to) return false;
+  return true;
+}
+function setReportRange(mode){
+  const fromEl = document.getElementById('reportFrom');
+  const toEl = document.getElementById('reportTo');
+  const now = new Date();
+  const toInputDate = (d)=> d.toISOString().slice(0,10);
+  if(mode==='today'){
+    fromEl.value = toInputDate(now); toEl.value = toInputDate(now);
+  } else if(mode==='week'){
+    const day = now.getDay();
+    const monday = new Date(now); monday.setDate(now.getDate() - ((day+6)%7));
+    fromEl.value = toInputDate(monday); toEl.value = toInputDate(now);
+  } else if(mode==='month'){
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    fromEl.value = toInputDate(first); toEl.value = toInputDate(now);
+  } else {
+    fromEl.value = ''; toEl.value = '';
+  }
+  renderReports();
+}
 function renderReports(){
-  const totalSales = state.sales.reduce((a,s)=>a+s.total,0);
-  const itemsSold = state.sales.reduce((a,s)=>a+s.items.reduce((b,i)=>b+i.qty,0),0);
-  const estProfit = state.sales.reduce((a,s)=>a+s.items.reduce((b,i)=>{
+  const {from, to} = getReportDateRange();
+  const filteredSales = state.sales.filter(s=>saleInRange(s, from, to));
+
+  const totalSales = filteredSales.reduce((a,s)=>a+s.total,0);
+  const itemsSold = filteredSales.reduce((a,s)=>a+s.items.reduce((b,i)=>b+i.qty,0),0);
+  const estProfit = filteredSales.reduce((a,s)=>a+s.items.reduce((b,i)=>{
     const p = state.products.find(x=>x.name===i.name);
     const cost = p ? p.purchase : i.price*0.85;
     return b + (i.price-cost)*i.qty;
@@ -711,6 +765,36 @@ function renderReports(){
   setText('statEstProfit', fmt(estProfit));
   setText('statItemsSold', itemsSold.toLocaleString());
   setText('statDueOutstanding', fmt(dueOutstanding));
+
+  const productAgg = {};
+  filteredSales.forEach(s=>{
+    s.items.forEach(i=>{
+      if(!productAgg[i.name]) productAgg[i.name] = {name:i.name, qty:0, revenue:0};
+      productAgg[i.name].qty += i.qty;
+      productAgg[i.name].revenue += i.price*i.qty;
+    });
+  });
+  const bestSellers = Object.values(productAgg).sort((a,b)=>b.qty-a.qty).slice(0,8);
+  const bsBox = document.getElementById('bestSellersRows');
+  if(bsBox){
+    bsBox.innerHTML = bestSellers.length ? bestSellers.map((b,i)=>`<div class="row"><div class="rowleft"><div class="ico">${i+1}</div><div><b>${b.name}</b><div class="sub">${b.qty} pcs বিক্রি</div></div></div><b>${fmt(b.revenue)}</b></div>`).join('') : `<div class="sub" style="padding:15px 0;text-align:center">এই সময়ে কোনো সেল নেই</div>`;
+  }
+
+  const catAgg = {};
+  filteredSales.forEach(s=>{
+    s.items.forEach(i=>{
+      const prod = state.products.find(x=>x.name===i.name);
+      const cat = (prod && prod.category) ? prod.category : 'সাধারণ';
+      if(!catAgg[cat]) catAgg[cat] = {name:cat, qty:0, revenue:0};
+      catAgg[cat].qty += i.qty;
+      catAgg[cat].revenue += i.price*i.qty;
+    });
+  });
+  const catList = Object.values(catAgg).sort((a,b)=>b.revenue-a.revenue);
+  const catBox = document.getElementById('categorySalesRows');
+  if(catBox){
+    catBox.innerHTML = catList.length ? catList.map(c=>`<div class="row"><div class="rowleft"><div class="ico">🏷️</div><div><b>${c.name}</b><div class="sub">${c.qty} pcs</div></div></div><b>${fmt(c.revenue)}</b></div>`).join('') : `<div class="sub" style="padding:15px 0;text-align:center">এই সময়ে কোনো সেল নেই</div>`;
+  }
 }
 function exportSalesCSV(){
   if(!state.sales.length){ showAlertDialog('এক্সপোর্ট করার মতো কোনো সেল ডেটা নেই।'); return; }
@@ -803,24 +887,42 @@ async function doLogin(){
     showLoginScreen('লগইন ব্যর্থ — ইমেইল বা পাসওয়ার্ড ভুল।');
   }
 }
+async function migrateOldSharedData(){
+  if(!currentUid){ showAlertDialog('আগে লগইন করো।'); return; }
+  const ok = await showConfirmDialog('পুরনো (শেয়ার্ড) দোকানের ডেটা এই অ্যাকাউন্টে নিয়ে আসতে চাও? এটা তোমার বর্তমান ডেটার উপর প্রতিস্থাপিত হয়ে যাবে।', {danger:true, icon:'⬇️', title:'পুরনো ডেটা ইমপোর্ট', okLabel:'হ্যাঁ, ইমপোর্ট করো'});
+  if(!ok) return;
+  try{
+    const shared = await window.Firebase.loadSharedState();
+    if(!shared){ showAlertDialog('পুরনো কোনো শেয়ার্ড ডেটা পাওয়া যায়নি।', {icon:'⚠️'}); return; }
+    state = shared;
+    await window.Firebase.saveState(currentUid, state);
+    renderAll();
+    showAlertDialog('পুরনো ডেটা সফলভাবে তোমার অ্যাকাউন্টে ইমপোর্ট হয়েছে।', {icon:'✅', title:'ইমপোর্ট সম্পন্ন'});
+  }catch(e){
+    console.error(e);
+    showAlertDialog('ইমপোর্ট ব্যর্থ হয়েছে। আবার চেষ্টা করো।', {icon:'❌'});
+  }
+}
 function doLogout(){
   if(unsubscribeState){ unsubscribeState(); unsubscribeState = null; }
+  currentUid = null;
   window.Firebase.logout();
 }
 function initAfterAuth(user){
   showApp();
   const emailEl = document.getElementById('loggedInEmail');
   if(emailEl) emailEl.textContent = user.email;
-  window.Firebase.loadState().then(async remote=>{
+  currentUid = user.uid;
+  window.Firebase.loadState(currentUid).then(async remote=>{
     if(remote){
       state = remote;
     } else {
-      state = defaultState();
-      await window.Firebase.saveState(state);
+      state = emptyState();
+      await window.Firebase.saveState(currentUid, state);
     }
     renderAll();
     if(unsubscribeState) unsubscribeState();
-    unsubscribeState = window.Firebase.watchState(function(remoteState){
+    unsubscribeState = window.Firebase.watchState(currentUid, function(remoteState){
       isRemoteUpdate = true;
       state = remoteState;
       renderAll();
