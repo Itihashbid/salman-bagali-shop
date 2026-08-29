@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SALMAN BANGALI SHOP — Showroom POS System</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.12.3/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script type="module" src="firebase-init.js"></script>
+</head>
+<body>
+<div class="modal show" id="loginModal" style="z-index:50">
+ <div class="receiptWrap" style="width:340px;max-width:90vw">
+  <h2 style="margin:0 0 14px;font-size:18px">🔒 Login — SALMAN BANGALI SHOP</h2>
+  <div class="formgrid" style="grid-template-columns:1fr">
+   <div class="field"><label>Email</label><input id="loginEmail" type="email" placeholder="you@example.com"></div>
+   <div class="field"><label>Password</label><input id="loginPassword" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+  </div>
+  <p class="sub danger" id="loginError" style="display:none;margin-top:8px"></p>
+  <div class="modalBtns"><button class="btn primary" style="width:100%" onclick="doLogin()">Login</button></div>
+ </div>
+</div>
+<div class="app" id="appRoot" style="display:none">
+<aside>
+ <div class="brand"><b>SALMAN BANGALI SHOP</b><small>RETAIL POS • STORE MANAGEMENT</small></div>
+ <nav id="nav">
+  <button class="active" onclick="show('dashboard',this)">⌂ &nbsp; Dashboard</button>
+  <button onclick="show('pos',this)">🛒 &nbsp; New Sale / POS</button>
+  <button onclick="show('products',this)">▣ &nbsp; Products & Stock</button>
+  <button onclick="show('customers',this)">♙ &nbsp; Customers</button>
+  <button onclick="show('ledger',this)">৳ &nbsp; Due / Ledger</button>
+  <button onclick="show('cash',this)">◈ &nbsp; Cash Flow</button>
+  <button onclick="show('purchases',this)">＋ &nbsp; Purchases</button>
+  <button onclick="show('returns',this)">↩ &nbsp; Sales Return</button>
+  <button onclick="show('reports',this)">⌁ &nbsp; Reports</button>
+  <button onclick="show('settings',this)">⚙ &nbsp; Settings</button>
+ </nav>
+</aside>
+<main>
+<header class="top"><div><h1 id="pageTitle">Good Evening 👋</h1><p>SALMAN BANGALI SHOP · Friday, 28 August 2026</p></div><div class="user"><span class="sub" id="loggedInEmail">Admin</span><button class="link danger" onclick="doLogout()" style="margin-right:6px">Logout</button><div class="avatar">SC</div></div></header>
+
+<section id="dashboard" class="screen active">
+ <div class="cards">
+  <div class="card"><div class="label">আজকের বিক্রি</div><div class="num" id="statTodaySales">৳0</div><div class="up">Live</div></div>
+  <div class="card"><div class="label">আজকের বাকি</div><div class="num" id="statTodayDue">৳0</div><div class="up" id="statTodayDueSub">0 customers</div></div>
+  <div class="card"><div class="label">আজকের খরচ</div><div class="num" id="statTodayExpense">৳0</div><div class="up" id="statTodayExpenseSub">0 transactions</div></div>
+  <div class="card"><div class="label">Cash Balance</div><div class="num" id="statCashBalance">৳0</div><div class="up">Closing estimate</div></div>
+ </div>
+ <div style="display:flex;gap:9px;margin-top:15px"><button class="btn primary" onclick="show('pos')">＋ New Sale</button><button class="btn soft" onclick="show('products')">＋ Add Product</button><button class="btn soft" onclick="show('ledger')">৳ Collect Due</button></div>
+ <div class="grid">
+  <div class="panel"><div class="head"><h2>Sales Overview</h2><button class="link">Last 7 days⌄</button></div><div style="height:190px;display:flex;align-items:end;gap:10px;border-bottom:1px solid var(--line);padding:10px 5px">
+   <i style="height:45%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:62%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:40%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:72%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:55%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:86%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:67%;flex:1;background:var(--gold);border-radius:6px 6px 0 0"></i>
+  </div></div>
+  <div class="panel"><div class="head"><h2>⚠ Low Stock</h2><button class="link" onclick="show('products')">View all</button></div><div class="rows" id="lowStockRows"></div></div>
+ </div>
+ <div class="grid"><div class="panel"><div class="head"><h2>Recent Sales</h2><button class="link" onclick="show('reports')">View all</button></div><div class="rows" id="recentSalesRows"></div></div><div class="panel"><div class="head"><h2>Due Customers</h2><button class="link" onclick="show('ledger')">Ledger</button></div><div class="rows" id="dueCustomersRows"></div></div></div>
+</section>
+
+<section id="pos" class="screen">
+ <div class="pos">
+  <div class="panel"><div class="head"><h2>New Sale · POS Billing</h2><span class="pill">Register #01</span></div><div class="toolbar"><input class="search" id="search" oninput="filterProducts()" onkeydown="handleScanEnter(event)" placeholder="🔍 Search product or scan barcode (scan করে Enter চাপুন)..."><button class="btn soft" id="cameraScanBtn" onclick="openCameraScanner()" title="ক্যামেরা দিয়ে বারকোড স্ক্যান করুন">📷 Scan</button></div>
+   <div class="products" id="productGrid"></div>
+  </div>
+  <div class="panel cart"><div class="head"><h2>Current Cart</h2><button class="link" onclick="cart=[];renderCart()">Clear</button></div><div id="cart"></div><div class="totalbox">
+   <div class="totalrow"><span>Subtotal</span><b id="subtotal">৳0</b></div>
+   <div class="field"><label>Discount</label><div class="inline2"><input type="number" id="discountValue" min="0" value="0" oninput="renderCart()"><select id="discountType" onchange="renderCart()"><option value="amount">৳ Flat</option><option value="percent">% Percent</option></select></div></div>
+   <div class="totalrow"><span>Discount</span><b id="discountShow" class="danger">− ৳0</b></div>
+   <div class="field"><label>VAT %</label><input type="number" id="vatPercent" min="0" step="0.01" value="0" oninput="renderCart()"></div>
+   <div class="totalrow"><span>VAT (<span id="vatPercentShow">0</span>%)</span><b id="vatShow">৳0</b></div>
+   <div class="totalrow grand"><span>Total</span><b id="total">৳0</b></div>
+   <div class="field" style="margin-top:12px"><label>Customer (optional)</label><select id="posCustomer"><option>Walk-in Customer</option></select></div>
+   <div class="field"><label>Payment split</label><div class="inline2"><input type="number" id="payCash" min="0" value="0" oninput="renderCart()" placeholder="Cash ৳"><input type="number" id="payBkash" min="0" value="0" oninput="renderCart()" placeholder="bKash ৳"></div></div>
+   <div class="paygrid"><button onclick="quickPay('cash')">Full Cash</button><button onclick="quickPay('bkash')">Full bKash</button><button onclick="quickPay('due')">Full Due</button></div>
+   <div class="totalrow"><span>Paid</span><b id="paidShow">৳0</b></div>
+   <div class="totalrow"><span>Due</span><b id="dueShow" class="danger">৳0</b></div>
+   <button class="print" onclick="openReceipt()">🧾 PAY & PRINT RECEIPT</button>
+  </div></div>
+ </div>
+</section>
+
+<section id="products" class="screen"><div class="panel"><div class="head"><h2>Products & Inventory</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn soft" onclick="downloadProductTemplate()">📄 Template</button><button class="btn soft" onclick="document.getElementById('excelImportInput').click()">📥 Excel/CSV ইমপোর্ট</button><button class="btn soft" onclick="printAllBarcodeLabels()">🏷️ সব লেবেল প্রিন্ট</button><button class="btn primary" onclick="openAddProduct()">＋ Add Product</button></div></div><input type="file" id="excelImportInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)"><div class="toolbar"><input class="search" id="productSearch" oninput="filterProductsTable()" placeholder="🔍 Search products, SKU or barcode"></div><div class="tablewrap"><table class="table"><thead><tr><th>Product</th><th>SKU / Barcode</th><th>Purchase</th><th>Sell</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="productsTableBody"></tbody></table></div></div></section>
+
+<section id="customers" class="screen"><div class="panel"><div class="head"><h2>Customers</h2><button class="btn primary" onclick="openAddCustomer()">＋ New Customer</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Customer</th><th>Mobile</th><th>Total Purchase</th><th>Due</th><th>Last Purchase</th><th>Actions</th></tr></thead><tbody id="customersTableBody"></tbody></table></div></div></section>
+
+<section id="ledger" class="screen"><div class="grid"><div class="panel"><div class="head"><h2>Customer Due Ledger</h2><button class="btn primary" onclick="openReceivePayment()">＋ Receive Payment</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Date</th><th>Customer</th><th>Invoice</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead><tbody id="ledgerTableBody"></tbody></table></div></div><div class="panel"><div class="head"><h2>Total Outstanding</h2></div><div class="num danger" id="totalOutstanding">৳0</div><div class="sub" id="outstandingCount">Across 0 customers</div></div></div></section>
+
+<section id="cash" class="screen"><div class="cards"><div class="card"><div class="label">Opening Cash</div><div class="num" id="statOpeningCash">৳0</div></div><div class="card"><div class="label">Cash In</div><div class="num" id="statCashIn">৳0</div></div><div class="card"><div class="label">Cash Out</div><div class="num" id="statCashOut">৳0</div></div><div class="card"><div class="label">Expected Closing</div><div class="num" id="statClosingCash">৳0</div></div></div><div class="panel" style="margin-top:15px"><div class="head"><h2>Today's Cash Flow</h2><button class="btn primary" onclick="openAddExpense()">＋ Add Expense</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Time</th><th>Description</th><th>Type</th><th>Amount</th></tr></thead><tbody id="cashTableBody"></tbody></table></div></div></section>
+
+<section id="purchases" class="screen">
+<div class="panel"><div class="head"><h2>Purchase / Stock In</h2><button class="btn primary" onclick="openNewPurchase()">＋ New Purchase</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Date</th><th>Supplier</th><th>Invoice</th><th>Items</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead><tbody id="purchasesTableBody"></tbody></table></div></div>
+<div class="panel" style="margin-top:15px"><div class="head"><h2>Purchase Return History</h2></div><div class="tablewrap"><table class="table"><thead><tr><th>Date</th><th>Invoice</th><th>Supplier</th><th>Product</th><th>Qty</th><th>Amount</th></tr></thead><tbody id="purchaseReturnsTableBody"></tbody></table></div></div>
+</section>
+
+<section id="returns" class="screen"><div class="panel"><div class="head"><h2>Sales Return / Exchange</h2><button class="btn primary" onclick="focusReturnSearch()">↩ New Return</button></div><div class="toolbar"><input class="search" id="returnInvoiceSearch" placeholder="Enter invoice number, e.g. 1025 or #1025"><button class="btn primary" onclick="searchReturnInvoice()">Search</button></div><p class="sub">Search an invoice to select items for return. Stock will be restored automatically after confirmation.</p><div id="returnResult"></div></div><div class="panel" style="margin-top:15px"><div class="head"><h2>Return History</h2></div><div class="tablewrap"><table class="table"><thead><tr><th>Date</th><th>Invoice</th><th>Product</th><th>Qty</th><th>Amount</th></tr></thead><tbody id="returnsTableBody"></tbody></table></div></div></section>
+
+<section id="reports" class="screen"><div class="cards"><div class="card"><div class="label">Total Sales</div><div class="num" id="statMonthlySales">৳0</div></div><div class="card"><div class="label">Estimated Profit</div><div class="num" id="statEstProfit">৳0</div></div><div class="card"><div class="label">Items Sold</div><div class="num" id="statItemsSold">0</div></div><div class="card"><div class="label">Due Outstanding</div><div class="num danger" id="statDueOutstanding">৳0</div></div></div><div class="panel" style="margin-top:15px"><div class="head"><h2>Reports</h2><button class="btn soft" onclick="exportSalesCSV()">Export Excel (CSV)</button></div><p class="sub">CSV এক্সপোর্টে সব ইনভয়েসের তালিকা থাকবে — Excel বা Google Sheets দিয়ে খোলা যাবে।</p></div></section>
+
+<section id="settings" class="screen"><div class="grid"><div class="panel"><div class="head"><h2>Store Settings</h2></div><div class="formgrid"><div class="field"><label>Store Name</label><input id="settingStoreName"></div><div class="field"><label>Phone</label><input id="settingPhone"></div><div class="field"><label>Address</label><input id="settingAddress"></div><div class="field"><label>Receipt Size</label><select id="settingReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div><div class="field"><label>Default VAT %</label><input id="settingVatPercent" type="number" min="0" step="0.01"></div></div><div style="display:flex;gap:9px;margin-top:15px"><button class="btn primary" onclick="saveSettings()">Save Settings</button><button class="btn soft" onclick="resetDemoData()">Reset Demo Data</button></div></div><div class="panel"><div class="head"><h2>Users & Permissions</h2><button class="btn primary" onclick="openAddUser()">＋ Add User</button></div><div class="rows" id="usersListRows"></div></div></div></section>
+
+</main>
+</div>
+
+<div class="modal" id="receiptModal"><div class="receiptWrap"><div class="receipt" id="receipt">
+<h3>SALMAN BANGALI SHOP</h3><p>Retail Store</p><p>01307935516</p><div class="dash"></div><p style="text-align:left" id="receiptMeta">Invoice: #INV-1026<br>Date: 28-08-2026 22:15<br>Customer: Walk-in Customer</p><div class="dash"></div><div id="receiptItems"></div><div class="dash"></div><div class="rline"><span>Subtotal</span><span id="rsub">৳0</span></div><div class="rline"><span>Discount</span><span id="rdiscount">− ৳0</span></div><div class="rline"><span id="rvatLabel">VAT (0%)</span><span id="rvat">৳0</span></div><div class="rline rgrand"><span>TOTAL</span><span id="rtotal">৳0</span></div><div id="rpaidBreakdown"></div><div class="rline"><span>Due</span><span id="rdue">৳0</span></div><div class="dash"></div><p>Thank you • আবার আসবেন</p></div><div class="modalBtns"><button class="btn soft" onclick="closeReceipt()">Close</button><button class="btn primary" onclick="window.print()">🖨 Print</button></div></div></div>
+
+<div class="modal" id="formModal"><div class="receiptWrap" style="width:380px;max-width:90vw">
+ <h2 id="formModalTitle" style="margin:0 0 14px;font-size:17px"></h2>
+ <div class="formgrid" id="formModalFields"></div>
+ <div class="modalBtns"><button class="btn soft" onclick="closeFormModal()">Cancel</button><button class="btn primary" onclick="submitFormModal()">Save</button></div>
+</div></div>
+
+<div class="modal" id="scannerModal"><div class="receiptWrap" style="width:420px;max-width:92vw">
+ <div class="head" style="margin-bottom:12px"><h2 style="margin:0;font-size:16px">📷 বারকোড স্ক্যান করুন</h2></div>
+ <div id="scannerViewport" class="scannerViewport"><div class="scanFrame"></div></div>
+ <p class="sub" style="text-align:center;margin:10px 0 0">বারকোডটি ক্যামেরার সামনে স্থির রাখুন</p>
+ <div class="modalBtns"><button class="btn soft" onclick="closeCameraScanner()">বন্ধ করুন</button></div>
+</div></div>
+
+<div id="barcodePrintArea"></div>
+
+<div class="mobile"><button class="active" onclick="show('dashboard')">⌂<br>Home</button><button onclick="show('pos')">＋<br>Sale</button><button onclick="show('products')">▣<br>Stock</button><button onclick="show('customers')">♙<br>Customer</button><button onclick="show('ledger')">৳<br>Due</button></div>
+<script src="script.js" defer></script>
+</body>
+</html>
