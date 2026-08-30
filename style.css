@@ -28,3 +28,6 @@ main{margin-left:246px;width:calc(100% - 246px);padding:26px 30px 60px}.top{disp
 .mobile{display:none}
 @media(max-width:950px){aside{display:none}main{margin:0;width:100%;padding:17px 13px 80px}.cards{grid-template-columns:repeat(2,1fr)}.grid,.pos{grid-template-columns:1fr}.products{grid-template-columns:repeat(2,1fr)}.cart{position:static}.mobile{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);z-index:10;justify-content:space-around;padding:8px}.mobile button{background:none;border:0;font-size:10px;color:#777}.mobile .active{color:var(--green);font-weight:700}.top h1{font-size:21px}}
 .link.danger{color:var(--red)}
+.avatarPlusBtn{position:absolute;right:-2px;bottom:-2px;width:30px;height:30px;border-radius:50%;background:var(--green);color:#fff;border:3px solid var(--card);font-size:17px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:800;padding:0;box-shadow:var(--shadow)}
+.avatarPlusBtn:hover{background:var(--green2)}
+.profileCard .field{margin-top:12px}

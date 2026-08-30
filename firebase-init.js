@@ -20,9 +20,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// পুরনো শেয়ার্ড ডেটা (মাইগ্রেশনের জন্য সাময়িক) — সবাই আগে এই একটাই ডকুমেন্ট শেয়ার করত
-const SHARED_STATE_DOC = doc(db, "posData", "main");
-
 function stateDocFor(uid){
   return doc(db, "posData", uid);
 }
@@ -55,11 +52,6 @@ window.Firebase = {
     return onSnapshot(stateDocFor(uid), (snap)=>{
       if(snap.exists()) cb(snap.data().data);
     });
-  },
-  // ===== সাময়িক: পুরনো শেয়ার্ড ডেটা মাইগ্রেশনের জন্য =====
-  async loadSharedState(){
-    const snap = await getDoc(SHARED_STATE_DOC);
-    return snap.exists() ? snap.data().data : null;
   }
 };
 

@@ -155,7 +155,7 @@ function defaultState(){
       {id:uid(), name:'Admin User', role:'Admin'},
       {id:uid(), name:'Store Cashier', role:'Cashier'},
     ],
-    settings: {storeName:'SALMAN BANGALI SHOP', phone:'017XXXXXXXX', address:'Your shop address', receiptSize:'80mm Thermal', vatPercent:0},
+    settings: {storeName:'SALMAN BANGALI SHOP', phone:'017XXXXXXXX', address:'Your shop address', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'Thank you • আবার আসবেন'},
   };
 }
 
@@ -179,13 +179,13 @@ function emptyState(){
     purchaseReturns: [],
     sales: [],
     users: [{id:uid(), name:'Admin User', role:'Admin'}],
-    settings: {storeName:'আমার দোকান', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0},
+    settings: {storeName:'SB POS SYSTEM', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'ধন্যবাদ • আবার আসবেন'},
   };
 }
 async function resetDemoData(){
-  const ok = await showConfirmDialog('সব ডেটা মুছে ডেমো ডেটা দিয়ে আবার শুরু করতে চাও?', {danger:true, icon:'⚠️', okLabel:'হ্যাঁ, রিসেট করো', title:'ডেমো ডেটা রিসেট'});
+  const ok = await showConfirmDialog('সব ডেটা মুছে একদম ফাঁকা দোকান দিয়ে নতুন করে শুরু করতে চাও? এই কাজ ফেরানো যাবে না।', {danger:true, icon:'⚠️', okLabel:'হ্যাঁ, সব মুছে ফেলো', title:'সব ডেটা মুছে ফেলুন'});
   if(!ok) return;
-  state = defaultState();
+  state = emptyState();
   save();
   renderAll();
 }
@@ -449,6 +449,12 @@ function openReceipt(){
   document.getElementById('receiptItems').innerHTML = cart.map(x=>`<div class="rline"><span>${x.name} ×${x.qty}</span><span>${fmt(x.price*x.qty)}</span></div>`).join('');
   const metaEl = document.getElementById('receiptMeta');
   if(metaEl) metaEl.innerHTML = `Invoice: ${invoice}<br>Date: ${todayStr()} ${nowTime()}<br>Customer: ${customer}`;
+  const rLogo = document.getElementById('receiptLogo');
+  if(rLogo){ if(state.settings.logo){ rLogo.src = state.settings.logo; rLogo.style.display='block'; } else { rLogo.style.display='none'; } }
+  setText('receiptStoreName', state.settings.storeName || 'My Shop');
+  setText('receiptAddress', state.settings.address || '');
+  setText('receiptPhone', state.settings.phone || '');
+  setText('receiptFooterNote', state.settings.footerNote || 'Thank you • আবার আসবেন');
   setText('rsub', fmt(t.subtotal));
   setText('rdiscount', t.discountAmt>0 ? ('− ' + fmt(t.discountAmt)) : fmt(0));
   setText('rvatLabel', `VAT (${t.vatPercent}%)`);
@@ -813,11 +819,52 @@ function exportSalesCSV(){
 /* ===================== SETTINGS ===================== */
 function fillSettingsForm(){
   const s = state.settings;
-  const map = {settingStoreName:'storeName', settingPhone:'phone', settingAddress:'address', settingReceiptSize:'receiptSize', settingVatPercent:'vatPercent'};
+  const map = {settingStoreName:'storeName', settingPhone:'phone', settingAddress:'address', settingReceiptSize:'receiptSize', settingVatPercent:'vatPercent', settingOwnerName:'ownerName', settingFooterNote:'footerNote'};
   Object.keys(map).forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.value = s[map[id]] !== undefined ? s[map[id]] : (id==='settingVatPercent' ? 0 : '');
   });
+  const preview = document.getElementById('logoPreview');
+  const removeBtn = document.getElementById('removeLogoBtn');
+  if(preview){
+    if(s.logo){ preview.src = s.logo; preview.style.display = 'block'; if(removeBtn) removeBtn.style.display = 'inline'; }
+    else { preview.style.display = 'none'; if(removeBtn) removeBtn.style.display = 'none'; }
+  }
+}
+function handleLogoUpload(e){
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  if(file.size > 1024*1024){ showAlertDialog('ছবির সাইজ ১MB এর কম হতে হবে। ছোট সাইজের ছবি দাও।', {icon:'⚠️'}); e.target.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    state.settings.logo = ev.target.result;
+    save();
+    fillSettingsForm();
+    applyBranding();
+    showAlertDialog('লোগো আপলোড হয়ে গেছে।', {icon:'✅'});
+  };
+  reader.readAsDataURL(file);
+}
+function removeLogo(){
+  state.settings.logo = '';
+  save();
+  fillSettingsForm();
+  applyBranding();
+}
+function getShopInitials(name){
+  const words = (name||'').trim().split(/\s+/).filter(Boolean);
+  if(words.length===0) return 'SB';
+  if(words.length===1) return words[0].slice(0,2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+function applyBranding(){
+  const s = state.settings;
+  const logoImg = document.getElementById('brandLogoImg');
+  const nameText = document.getElementById('brandNameText');
+  const avatarBtn = document.getElementById('avatarBtn');
+  if(logoImg){ if(s.logo){ logoImg.src = s.logo; logoImg.style.display = 'block'; } else { logoImg.style.display = 'none'; } }
+  if(nameText) nameText.textContent = s.storeName || 'My Shop';
+  if(avatarBtn) avatarBtn.textContent = getShopInitials(s.storeName);
 }
 function saveSettings(){
   state.settings.storeName = document.getElementById('settingStoreName').value;
@@ -825,8 +872,71 @@ function saveSettings(){
   state.settings.address = document.getElementById('settingAddress').value;
   state.settings.receiptSize = document.getElementById('settingReceiptSize').value;
   state.settings.vatPercent = +document.getElementById('settingVatPercent').value || 0;
+  state.settings.ownerName = document.getElementById('settingOwnerName').value;
+  state.settings.footerNote = document.getElementById('settingFooterNote').value;
   save();
+  applyBranding();
   showAlertDialog('সেটিংস সেভ হয়েছে।', {icon:'✅'});
+}
+/* ===================== PROFILE PANEL (avatar icon) ===================== */
+function toggleProfileMenu(){
+  fillProfileForm();
+  document.getElementById('profileModal').classList.add('show');
+}
+function closeProfileMenu(){
+  document.getElementById('profileModal').classList.remove('show');
+}
+function fillProfileForm(){
+  const s = state.settings;
+  const emailEl = document.getElementById('loggedInEmail');
+  const profEmail = document.getElementById('profileEmail');
+  if(profEmail) profEmail.textContent = emailEl ? emailEl.textContent : '';
+  const map = {profileStoreName:'storeName', profileOwnerName:'ownerName', profilePhone:'phone', profileAddress:'address', profileFooterNote:'footerNote', profileVatPercent:'vatPercent', profileReceiptSize:'receiptSize'};
+  Object.keys(map).forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.value = s[map[id]] !== undefined ? s[map[id]] : (id==='profileVatPercent' ? 0 : '');
+  });
+  const preview = document.getElementById('profileLogoPreview');
+  const removeBtn = document.getElementById('profileRemoveLogoBtn');
+  if(preview){
+    if(s.logo){ preview.src = s.logo; preview.style.display = 'block'; if(removeBtn) removeBtn.style.display = 'inline'; }
+    else { preview.style.display = 'none'; if(removeBtn) removeBtn.style.display = 'none'; }
+  }
+}
+function handleProfileLogoUpload(e){
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  if(file.size > 1024*1024){ showAlertDialog('ছবির সাইজ ১MB এর কম হতে হবে। ছোট সাইজের ছবি দাও।', {icon:'⚠️'}); e.target.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    state.settings.logo = ev.target.result;
+    save();
+    fillProfileForm();
+    fillSettingsForm();
+    applyBranding();
+  };
+  reader.readAsDataURL(file);
+}
+function removeProfileLogo(){
+  state.settings.logo = '';
+  save();
+  fillProfileForm();
+  fillSettingsForm();
+  applyBranding();
+}
+function saveProfileSettings(){
+  state.settings.storeName = document.getElementById('profileStoreName').value;
+  state.settings.ownerName = document.getElementById('profileOwnerName').value;
+  state.settings.phone = document.getElementById('profilePhone').value;
+  state.settings.address = document.getElementById('profileAddress').value;
+  state.settings.footerNote = document.getElementById('profileFooterNote').value;
+  state.settings.vatPercent = +document.getElementById('profileVatPercent').value || 0;
+  state.settings.receiptSize = document.getElementById('profileReceiptSize').value;
+  save();
+  fillSettingsForm();
+  applyBranding();
+  showAlertDialog('প্রোফাইল সেভ হয়েছে।', {icon:'✅'});
+  closeProfileMenu();
 }
 function renderUsersList(){
   const box = document.getElementById('usersListRows');
@@ -850,6 +960,7 @@ function deleteUser(id){
 
 /* ===================== INIT ===================== */
 function renderAll(){
+  applyBranding();
   renderDashboard();
   renderPOSGrid();
   renderPOSCustomers();
@@ -885,22 +996,6 @@ async function doLogin(){
     await window.Firebase.login(email, password);
   }catch(e){
     showLoginScreen('লগইন ব্যর্থ — ইমেইল বা পাসওয়ার্ড ভুল।');
-  }
-}
-async function migrateOldSharedData(){
-  if(!currentUid){ showAlertDialog('আগে লগইন করো।'); return; }
-  const ok = await showConfirmDialog('পুরনো (শেয়ার্ড) দোকানের ডেটা এই অ্যাকাউন্টে নিয়ে আসতে চাও? এটা তোমার বর্তমান ডেটার উপর প্রতিস্থাপিত হয়ে যাবে।', {danger:true, icon:'⬇️', title:'পুরনো ডেটা ইমপোর্ট', okLabel:'হ্যাঁ, ইমপোর্ট করো'});
-  if(!ok) return;
-  try{
-    const shared = await window.Firebase.loadSharedState();
-    if(!shared){ showAlertDialog('পুরনো কোনো শেয়ার্ড ডেটা পাওয়া যায়নি।', {icon:'⚠️'}); return; }
-    state = shared;
-    await window.Firebase.saveState(currentUid, state);
-    renderAll();
-    showAlertDialog('পুরনো ডেটা সফলভাবে তোমার অ্যাকাউন্টে ইমপোর্ট হয়েছে।', {icon:'✅', title:'ইমপোর্ট সম্পন্ন'});
-  }catch(e){
-    console.error(e);
-    showAlertDialog('ইমপোর্ট ব্যর্থ হয়েছে। আবার চেষ্টা করো।', {icon:'❌'});
   }
 }
 function doLogout(){
