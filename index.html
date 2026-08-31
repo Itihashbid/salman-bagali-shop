@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SB POS SYSTEM — Showroom POS System</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTQwIDE0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0iaUdyZWVuQmciIGN4PSI0MiUiIGN5PSIzNCUiIHI9Ijc1JSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMyMjY4NWEiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSI1NSUiIHN0b3AtY29sb3I9IiMxNzRkNDIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMGUzMzJiIi8+CiAgICA8L3JhZGlhbEdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJpR29sZFN0cm9rZSIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNlN2NkOTgiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSI0NSUiIHN0b3AtY29sb3I9IiNiOTliNjEiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjOGE2ZjNmIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJpR29sZFRleHQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMCUiIHkyPSIxMDAlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2YxZGRiMCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjU1JSIgc3RvcC1jb2xvcj0iI2NiYWI3MiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5ZDdmNDciLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxjaXJjbGUgY3g9IjcwIiBjeT0iNzAiIHI9IjY2IiBmaWxsPSJ1cmwoI2lHcmVlbkJnKSIgc3Ryb2tlPSJ1cmwoI2lHb2xkU3Ryb2tlKSIgc3Ryb2tlLXdpZHRoPSI0Ii8+CiAgPGNpcmNsZSBjeD0iNzAiIGN5PSI3MCIgcj0iNTUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2I5OWI2MSIgc3Ryb2tlLW9wYWNpdHk9IjAuNTUiIHN0cm9rZS13aWR0aD0iMS4yIi8+CiAgPHRleHQgeD0iNzAiIHk9Ijg4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iR2VvcmdpYSwgJ1RpbWVzIE5ldyBSb21hbicsIHNlcmlmIiBmb250LXNpemU9IjQ2IiBmb250LXdlaWdodD0iNzAwIiBsZXR0ZXItc3BhY2luZz0iMiIgZmlsbD0idXJsKCNpR29sZFRleHQpIj5TQjwvdGV4dD4KICA8ZyBzdHJva2U9IiNiOTliNjEiIHN0cm9rZS13aWR0aD0iMS40IiBvcGFjaXR5PSIwLjkiPgogICAgPGxpbmUgeDE9IjQyIiB5MT0iOTkiIHgyPSI1NyIgeTI9Ijk5Ii8+CiAgICA8bGluZSB4MT0iODMiIHkxPSI5OSIgeDI9Ijk4IiB5Mj0iOTkiLz4KICA8L2c+CiAgPHJlY3QgeD0iNjYiIHk9Ijk1IiB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjYjk5YjYxIiB0cmFuc2Zvcm09InJvdGF0ZSg0NSA3MCA5OSkiLz4KPC9zdmc+Cg==">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.12.3/JsBarcode.all.min.js"></script>
@@ -14,11 +13,7 @@
 <body>
 <div class="modal show" id="loginModal" style="z-index:50">
  <div class="receiptWrap" style="width:340px;max-width:90vw">
-  <div style="text-align:center;margin-bottom:14px">
-   <img src="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQwIDI0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0iZ3JlZW5CZyIgY3g9IjQyJSIgY3k9IjM0JSIgcj0iNzUlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzIyNjg1YSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjU1JSIgc3RvcC1jb2xvcj0iIzE3NGQ0MiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwZTMzMmIiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImdvbGRTdHJva2UiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZTdjZDk4Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iNDUlIiBzdG9wLWNvbG9yPSIjYjk5YjYxIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzhhNmYzZiIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ29sZFRleHQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMCUiIHkyPSIxMDAlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2YxZGRiMCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjU1JSIgc3RvcC1jb2xvcj0iI2NiYWI3MiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5ZDdmNDciLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8cGF0aCBpZD0iYXJjVG9wIiBkPSJNIDQwLDEyMCBBIDgwLDgwIDAgMCAxIDIwMCwxMjAiLz4KICA8L2RlZnM+CgogIDwhLS0gb3V0ZXIgdGhpbiByaW5nIC0tPgogIDxjaXJjbGUgY3g9IjEyMCIgY3k9IjEyMCIgcj0iMTE0IiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjZ29sZFN0cm9rZSkiIHN0cm9rZS13aWR0aD0iMiIvPgogIDwhLS0gbWFpbiBiYWRnZSAtLT4KICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSIxMjAiIHI9IjEwNCIgZmlsbD0idXJsKCNncmVlbkJnKSIgc3Ryb2tlPSJ1cmwoI2dvbGRTdHJva2UpIiBzdHJva2Utd2lkdGg9IjMiLz4KICA8IS0tIGlubmVyIGhhaXJsaW5lIC0tPgogIDxjaXJjbGUgY3g9IjEyMCIgY3k9IjEyMCIgcj0iOTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2I5OWI2MSIgc3Ryb2tlLW9wYWNpdHk9IjAuNTUiIHN0cm9rZS13aWR0aD0iMSIvPgoKICA8IS0tIGV5ZWJyb3cgYXJjIHRleHQgLS0+CiAgPHRleHQgZm9udC1mYW1pbHk9Ikdlb3JnaWEsICdUaW1lcyBOZXcgUm9tYW4nLCBzZXJpZiIgZm9udC1zaXplPSIxMiIgbGV0dGVyLXNwYWNpbmc9IjMuNCIgZmlsbD0iI2NiYWI3MiI+CiAgICA8dGV4dFBhdGggaHJlZj0iI2FyY1RvcCIgc3RhcnRPZmZzZXQ9IjUwJSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+UFJFTUlVTSAmIzgyMjY7IFBPUzwvdGV4dFBhdGg+CiAgPC90ZXh0PgoKICA8IS0tIG1vbm9ncmFtIC0tPgogIDx0ZXh0IHg9IjEyMCIgeT0iMTQ2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iR2VvcmdpYSwgJ1RpbWVzIE5ldyBSb21hbicsIHNlcmlmIiBmb250LXNpemU9Ijc2IiBmb250LXdlaWdodD0iNzAwIiBsZXR0ZXItc3BhY2luZz0iNCIgZmlsbD0idXJsKCNnb2xkVGV4dCkiPlNCPC90ZXh0PgoKICA8IS0tIHNpZ25hdHVyZSBmbG91cmlzaCAtLT4KICA8ZyBzdHJva2U9IiNiOTliNjEiIHN0cm9rZS13aWR0aD0iMS40Ij4KICAgIDxsaW5lIHgxPSI3MCIgeTE9IjE2NiIgeDI9IjEwNCIgeTI9IjE2NiIvPgogICAgPGxpbmUgeDE9IjEzNiIgeTE9IjE2NiIgeDI9IjE3MCIgeTI9IjE2NiIvPgogIDwvZz4KICA8cmVjdCB4PSIxMTYiIHk9IjE2MiIgd2lkdGg9IjgiIGhlaWdodD0iOCIgZmlsbD0iI2I5OWI2MSIgdHJhbnNmb3JtPSJyb3RhdGUoNDUgMTIwIDE2NikiLz4KCiAgPCEtLSBsb3dlciBhcmMgbGFiZWwgLS0+CiAgPHBhdGggaWQ9ImFyY0JvdHRvbSIgZD0iTSA0MCwxMjAgQSA4MCw4MCAwIDAgMCAyMDAsMTIwIiBmaWxsPSJub25lIi8+CiAgPHRleHQgZm9udC1mYW1pbHk9Ikdlb3JnaWEsICdUaW1lcyBOZXcgUm9tYW4nLCBzZXJpZiIgZm9udC1zaXplPSIxMiIgbGV0dGVyLXNwYWNpbmc9IjIuNiIgZmlsbD0iI2NiYWI3MiIgZmlsbC1vcGFjaXR5PSIwLjkiPgogICAgPHRleHRQYXRoIGhyZWY9IiNhcmNCb3R0b20iIHN0YXJ0T2Zmc2V0PSI1MCUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlNCIFBPUyBTWVNURU08L3RleHRQYXRoPgogIDwvdGV4dD4KPC9zdmc+Cg==" alt="SB POS SYSTEM" style="width:88px;height:88px;display:block;margin:0 auto 10px">
-   <h2 style="margin:0;font-size:18px">SB POS SYSTEM</h2>
-   <p class="sub" style="margin:4px 0 0">আপনার অ্যাকাউন্টে লগইন করুন</p>
-  </div>
+  <h2 style="margin:0 0 14px;font-size:18px">🔒 Login — SB POS SYSTEM</h2>
   <div class="formgrid" style="grid-template-columns:1fr">
    <div class="field"><label>Email</label><input id="loginEmail" type="email" placeholder="you@example.com"></div>
    <div class="field"><label>Password</label><input id="loginPassword" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
@@ -28,46 +23,56 @@
  </div>
 </div>
 <div class="modal" id="profileModal">
- <div class="receiptWrap profileCard" style="width:400px;max-width:92vw;max-height:88vh;overflow-y:auto">
-  <div style="text-align:center;padding:2px 0 16px">
-   <div style="position:relative;width:92px;margin:0 auto">
-    <img id="profileLogoPreview" src="" alt="Logo" style="width:92px;height:92px;border-radius:50%;object-fit:cover;border:3px solid var(--line);display:block;background:#f0ece3">
-    <button type="button" class="avatarPlusBtn" onclick="document.getElementById('profileLogoFile').click()" title="লোগো/ছবি যোগ করুন">+</button>
+ <div class="receiptWrap" style="width:400px;max-width:92vw;padding:0;overflow:hidden">
+  <div style="position:relative;background:linear-gradient(135deg,var(--green),var(--green2));border-radius:15px 15px 0 0;height:70px">
+   <button onclick="closeProfileMenu()" title="Close" style="position:absolute;top:10px;left:10px;background:rgba(255,255,255,.22);border:0;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:13px;padding:0">✕</button>
+   <button onclick="confirmLogout()" title="Logout" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,.22);border:0;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:13px;padding:0">🚪</button>
+  </div>
+  <div style="text-align:center;padding:0 20px">
+   <div style="position:relative;display:inline-block;margin-top:-40px">
+    <img id="profileLogoPreview" src="" style="display:none;width:80px;height:80px;border-radius:50%;object-fit:cover;border:4px solid #fff;background:#eee9df">
+    <div id="profileLogoPlaceholder" style="width:80px;height:80px;border-radius:50%;border:4px solid #fff;background:#eee9df;display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--muted)">🏪</div>
+    <button onclick="document.getElementById('profileLogoFile').click()" title="Add Logo" style="position:absolute;bottom:0;right:0;width:26px;height:26px;border-radius:50%;background:var(--green);color:#fff;border:3px solid #fff;cursor:pointer;font-size:14px;line-height:1;padding:0">+</button>
     <input type="file" id="profileLogoFile" accept="image/*" onchange="handleProfileLogoUpload(event)" style="display:none">
    </div>
-   <input id="profileStoreName" placeholder="দোকানের নাম" style="text-align:center;font-weight:800;font-size:19px;border:0;background:transparent;width:100%;margin-top:10px;outline:none;color:var(--ink)">
-   <p class="sub" id="profileEmail" style="margin:2px 0 0"></p>
-   <button class="link danger" id="profileRemoveLogoBtn" style="display:none;margin-top:4px;font-size:11px" onclick="removeProfileLogo()">লোগো সরাও</button>
+   <h2 id="profileDisplayName" style="margin:8px 0 0;font-size:17px">আমার দোকান</h2>
+   <p class="sub" id="profileStoreSubtitle" style="margin:1px 0 4px;font-weight:600"></p>
+   <p class="sub" id="profileEmail" style="margin:0 0 2px"></p>
+   <button class="link danger" id="profileRemoveLogoBtn" style="display:none;margin-bottom:4px;font-size:11px" onclick="removeProfileLogo()">লোগো সরাও</button>
   </div>
-  <div class="formgrid">
-   <div class="field"><label>Owner Name</label><input id="profileOwnerName"></div>
-   <div class="field"><label>Phone</label><input id="profilePhone"></div>
-   <div class="field" style="grid-column:1/-1"><label>Address</label><input id="profileAddress"></div>
-   <div class="field" style="grid-column:1/-1"><label>Receipt Footer Note</label><input id="profileFooterNote"></div>
-   <div class="field"><label>Default VAT %</label><input id="profileVatPercent" type="number" min="0" step="0.01"></div>
-   <div class="field"><label>Receipt Size</label><select id="profileReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div>
+  <div style="padding:10px 20px 0;max-height:48vh;overflow-y:auto">
+   <div class="formgrid">
+    <div class="field"><label>Store Name</label><input id="profileStoreName" oninput="livePreviewProfileName()"></div>
+    <div class="field"><label>Owner Name</label><input id="profileOwnerName" oninput="livePreviewProfileName()"></div>
+    <div class="field"><label>Phone</label><input id="profilePhone"></div>
+    <div class="field"><label>Receipt Size</label><select id="profileReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div>
+    <div class="field" style="grid-column:1/-1"><label>Address</label><input id="profileAddress"></div>
+    <div class="field" style="grid-column:1/-1"><label>Receipt Footer Note</label><input id="profileFooterNote"></div>
+   </div>
   </div>
-  <div class="modalBtns" style="margin-top:16px"><button class="btn soft" onclick="closeProfileMenu()">Close</button><button class="btn primary" onclick="saveProfileSettings()">Save</button></div>
-  <button class="link danger" style="width:100%;text-align:center;margin-top:12px" onclick="confirmLogout()">🚪 Logout</button>
+  <div style="padding:14px 20px 20px">
+   <button class="btn primary" style="width:100%" onclick="saveProfileSettings()">Save</button>
+  </div>
  </div>
+</div>
 </div>
 <div class="app" id="appRoot" style="display:none">
 <aside>
  <div class="brand" id="brandArea">
-  <img id="brandLogoImg" src="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTQwIDE0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0iaUdyZWVuQmciIGN4PSI0MiUiIGN5PSIzNCUiIHI9Ijc1JSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMyMjY4NWEiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSI1NSUiIHN0b3AtY29sb3I9IiMxNzRkNDIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMGUzMzJiIi8+CiAgICA8L3JhZGlhbEdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJpR29sZFN0cm9rZSIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNlN2NkOTgiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSI0NSUiIHN0b3AtY29sb3I9IiNiOTliNjEiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjOGE2ZjNmIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJpR29sZFRleHQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMCUiIHkyPSIxMDAlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2YxZGRiMCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjU1JSIgc3RvcC1jb2xvcj0iI2NiYWI3MiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5ZDdmNDciLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxjaXJjbGUgY3g9IjcwIiBjeT0iNzAiIHI9IjY2IiBmaWxsPSJ1cmwoI2lHcmVlbkJnKSIgc3Ryb2tlPSJ1cmwoI2lHb2xkU3Ryb2tlKSIgc3Ryb2tlLXdpZHRoPSI0Ii8+CiAgPGNpcmNsZSBjeD0iNzAiIGN5PSI3MCIgcj0iNTUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2I5OWI2MSIgc3Ryb2tlLW9wYWNpdHk9IjAuNTUiIHN0cm9rZS13aWR0aD0iMS4yIi8+CiAgPHRleHQgeD0iNzAiIHk9Ijg4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iR2VvcmdpYSwgJ1RpbWVzIE5ldyBSb21hbicsIHNlcmlmIiBmb250LXNpemU9IjQ2IiBmb250LXdlaWdodD0iNzAwIiBsZXR0ZXItc3BhY2luZz0iMiIgZmlsbD0idXJsKCNpR29sZFRleHQpIj5TQjwvdGV4dD4KICA8ZyBzdHJva2U9IiNiOTliNjEiIHN0cm9rZS13aWR0aD0iMS40IiBvcGFjaXR5PSIwLjkiPgogICAgPGxpbmUgeDE9IjQyIiB5MT0iOTkiIHgyPSI1NyIgeTI9Ijk5Ii8+CiAgICA8bGluZSB4MT0iODMiIHkxPSI5OSIgeDI9Ijk4IiB5Mj0iOTkiLz4KICA8L2c+CiAgPHJlY3QgeD0iNjYiIHk9Ijk1IiB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjYjk5YjYxIiB0cmFuc2Zvcm09InJvdGF0ZSg0NSA3MCA5OSkiLz4KPC9zdmc+Cg==" alt="Logo" style="width:44px;height:44px;border-radius:10px;object-fit:cover;margin-bottom:8px">
+  <img id="brandLogoImg" src="" alt="Logo" style="display:none;width:44px;height:44px;border-radius:10px;object-fit:cover;margin-bottom:8px">
   <b id="brandNameText">SALMAN BANGALI SHOP</b><small>RETAIL POS • STORE MANAGEMENT</small>
  </div>
  <nav id="nav">
-  <button class="active" onclick="show('dashboard',this)">⌂ &nbsp; Dashboard</button>
-  <button onclick="show('pos',this)">🛒 &nbsp; New Sale / POS</button>
-  <button onclick="show('products',this)">▣ &nbsp; Products & Stock</button>
-  <button onclick="show('customers',this)">♙ &nbsp; Customers</button>
-  <button onclick="show('ledger',this)">৳ &nbsp; Due / Ledger</button>
-  <button onclick="show('cash',this)">◈ &nbsp; Cash Flow</button>
-  <button onclick="show('purchases',this)">＋ &nbsp; Purchases</button>
-  <button onclick="show('returns',this)">↩ &nbsp; Sales Return</button>
-  <button onclick="show('reports',this)">⌁ &nbsp; Reports</button>
-  <button onclick="show('settings',this)">⚙ &nbsp; Settings</button>
+  <button class="active" data-screen="dashboard" onclick="show('dashboard',this)">⌂ &nbsp; Dashboard</button>
+  <button data-screen="pos" onclick="show('pos',this)">🛒 &nbsp; New Sale / POS</button>
+  <button data-screen="products" onclick="show('products',this)">▣ &nbsp; Products & Stock</button>
+  <button data-screen="customers" onclick="show('customers',this)">♙ &nbsp; Customers</button>
+  <button data-screen="ledger" onclick="show('ledger',this)">৳ &nbsp; Due / Ledger</button>
+  <button data-screen="cash" onclick="show('cash',this)">◈ &nbsp; Cash Flow</button>
+  <button data-screen="purchases" onclick="show('purchases',this)">＋ &nbsp; Purchases</button>
+  <button data-screen="returns" onclick="show('returns',this)">↩ &nbsp; Sales Return</button>
+  <button data-screen="reports" onclick="show('reports',this)">⌁ &nbsp; Reports</button>
+  <button data-screen="settings" onclick="show('settings',this)">⚙ &nbsp; Settings</button>
  </nav>
 </aside>
 <main>
@@ -112,7 +117,7 @@
  </div>
 </section>
 
-<section id="products" class="screen"><div class="panel"><div class="head"><h2>Products & Inventory</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn soft" onclick="downloadProductTemplate()">📄 Template</button><button class="btn soft" onclick="document.getElementById('excelImportInput').click()">📥 Excel/CSV ইমপোর্ট</button><button class="btn soft" onclick="printAllBarcodeLabels()">🏷️ সব লেবেল প্রিন্ট</button><button class="btn primary" onclick="openAddProduct()">＋ Add Product</button></div></div><input type="file" id="excelImportInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)"><div class="toolbar"><input class="search" id="productSearch" oninput="filterProductsTable()" placeholder="🔍 Search products, SKU or barcode"></div><div class="tablewrap"><table class="table"><thead><tr><th>Product</th><th>SKU / Barcode</th><th>Category</th><th>Purchase</th><th>Sell</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="productsTableBody"></tbody></table></div></div></section>
+<section id="products" class="screen"><div class="panel"><div class="head"><h2>Products & Inventory</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn soft" onclick="downloadProductTemplate()">📄 Template</button><button class="btn soft" onclick="document.getElementById('excelImportInput').click()">📥 Excel/CSV ইমপোর্ট</button><button class="btn soft" onclick="printAllBarcodeLabels()">🏷️ সব লেবেল প্রিন্ট</button><button class="btn primary" onclick="openAddProduct()">＋ Add Product</button></div></div><input type="file" id="excelImportInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)"><div class="toolbar"><input class="search" id="productSearch" oninput="filterProductsTable()" placeholder="🔍 Search products, SKU or barcode"></div><div class="tablewrap"><table class="table"><thead><tr><th>Product</th><th>SKU / Barcode</th><th>Purchase</th><th>Sell</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="productsTableBody"></tbody></table></div></div></section>
 
 <section id="customers" class="screen"><div class="panel"><div class="head"><h2>Customers</h2><button class="btn primary" onclick="openAddCustomer()">＋ New Customer</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Customer</th><th>Mobile</th><th>Total Purchase</th><th>Due</th><th>Last Purchase</th><th>Actions</th></tr></thead><tbody id="customersTableBody"></tbody></table></div></div></section>
 
@@ -141,18 +146,12 @@
  </div>
 </div>
 <div class="cards" style="margin-top:15px"><div class="card"><div class="label">Total Sales</div><div class="num" id="statMonthlySales">৳0</div></div><div class="card"><div class="label">Estimated Profit</div><div class="num" id="statEstProfit">৳0</div></div><div class="card"><div class="label">Items Sold</div><div class="num" id="statItemsSold">0</div></div><div class="card"><div class="label">Due Outstanding</div><div class="num danger" id="statDueOutstanding">৳0</div></div></div>
-<div class="grid" style="margin-top:15px">
- <div class="panel"><div class="head"><h2>🏆 Best-Selling Products</h2></div><div class="rows" id="bestSellersRows"></div></div>
- <div class="panel"><div class="head"><h2>📦 Category-wise Sales</h2></div><div class="rows" id="categorySalesRows"></div></div>
-</div>
+<div class="panel" style="margin-top:15px"><div class="head"><h2>🏆 Best-Selling Products</h2></div><div class="rows" id="bestSellersRows"></div></div>
 <div class="panel" style="margin-top:15px"><div class="head"><h2>Reports</h2><button class="btn soft" onclick="exportSalesCSV()">Export Excel (CSV)</button></div><p class="sub">CSV এক্সপোর্টে সব ইনভয়েসের তালিকা থাকবে (ফিল্টার ছাড়া, সম্পূর্ণ ডেটা) — Excel বা Google Sheets দিয়ে খোলা যাবে।</p></div>
 </section>
 
-<section id="settings" class="screen"><div class="grid"><div class="panel"><div class="head"><h2>Store Settings</h2></div><div class="formgrid"><div class="field"><label>Store Name</label><input id="settingStoreName"></div><div class="field"><label>Phone</label><input id="settingPhone"></div><div class="field"><label>Address</label><input id="settingAddress"></div><div class="field"><label>Receipt Size</label><select id="settingReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div><div class="field"><label>Default VAT %</label><input id="settingVatPercent" type="number" min="0" step="0.01"></div><div class="field"><label>Owner Name</label><input id="settingOwnerName"></div><div class="field"><label>Receipt Footer Note</label><input id="settingFooterNote"></div><div class="field"><label>Shop Logo</label><input type="file" id="settingLogoFile" accept="image/*" onchange="handleLogoUpload(event)"></div></div>
-<div style="display:flex;align-items:center;gap:12px;margin-top:10px">
- <img id="logoPreview" src="" style="display:none;width:64px;height:64px;border-radius:12px;object-fit:cover;border:1px solid var(--line)">
- <button class="link danger" id="removeLogoBtn" style="display:none" onclick="removeLogo()">লোগো সরিয়ে ফেলো</button>
-</div><div style="display:flex;gap:9px;margin-top:15px"><button class="btn primary" onclick="saveSettings()">Save Settings</button><button class="btn soft" onclick="resetDemoData()">🗑️ সব ডেটা মুছে ফ্রেশ শুরু করো</button></div></div><div class="panel"><div class="head"><h2>Users & Permissions</h2><button class="btn primary" onclick="openAddUser()">＋ Add User</button></div><div class="rows" id="usersListRows"></div></div></div></section>
+<section id="settings" class="screen"><div class="grid"><div class="panel"><div class="head"><h2>Store Settings</h2></div><div class="formgrid"><div class="field"><label>Store Name</label><input id="settingStoreName"></div><div class="field"><label>Owner Name</label><input id="settingOwnerName"></div><div class="field"><label>Phone</label><input id="settingPhone"></div><div class="field"><label>Receipt Size</label><select id="settingReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div><div class="field" style="grid-column:1/-1"><label>Address</label><input id="settingAddress"></div><div class="field" style="grid-column:1/-1"><label>Receipt Footer Note</label><input id="settingFooterNote"></div><div class="field"><label>Default VAT %</label><input id="settingVatPercent" type="number" min="0" step="0.01"></div></div>
+<div style="display:flex;gap:9px;margin-top:15px"><button class="btn primary" onclick="saveSettings()">Save Settings</button><button class="btn soft" onclick="resetDemoData()">🗑️ সব ডেটা মুছে ফ্রেশ শুরু করো</button></div></div><div class="panel"><div class="head"><h2>Users & Permissions</h2><button class="btn primary" onclick="openAddUser()">＋ Add User</button></div><div class="rows" id="usersListRows"></div></div></div></section>
 
 </main>
 </div>
@@ -175,7 +174,7 @@
 
 <div id="barcodePrintArea"></div>
 
-<div class="mobile"><button class="active" onclick="show('dashboard')">⌂<br>Home</button><button onclick="show('pos')">＋<br>Sale</button><button onclick="show('products')">▣<br>Stock</button><button onclick="show('customers')">♙<br>Customer</button><button onclick="show('ledger')">৳<br>Due</button></div>
+<div class="mobile"><button class="active" data-screen="dashboard" onclick="show('dashboard')">⌂<br>Home</button><button data-screen="pos" onclick="show('pos')">＋<br>Sale</button><button data-screen="products" onclick="show('products')">▣<br>Stock</button><button data-screen="customers" onclick="show('customers')">♙<br>Customer</button><button data-screen="ledger" onclick="show('ledger')">৳<br>Due</button></div>
 <script src="script.js" defer></script>
 </body>
 </html>

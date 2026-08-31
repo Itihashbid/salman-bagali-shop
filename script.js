@@ -114,12 +114,12 @@ function showPromptDialog(message, defaultValue='', opts={}){
 
 function defaultState(){
   const products = [
-    {id:uid(), emoji:'🍚', name:'Miniket Rice 5kg', sku:'RC-5001', category:'মুদি পণ্য', purchase:320, sell:350, stock:24},
-    {id:uid(), emoji:'🧴', name:'Soybean Oil 2L',   sku:'OL-2002', category:'মুদি পণ্য', purchase:165, sell:180, stock:18},
-    {id:uid(), emoji:'🧼', name:'Lux Soap',          sku:'SP-0065', category:'কসমেটিকস', purchase:55,  sell:65,  stock:12},
-    {id:uid(), emoji:'🍪', name:'Family Biscuit',    sku:'BS-0080', category:'স্ন্যাকস', purchase:65,  sell:80,  stock:31},
-    {id:uid(), emoji:'🥤', name:'Coca Cola 1L',      sku:'CC-0120', category:'পানীয়', purchase:100, sell:120, stock:20},
-    {id:uid(), emoji:'🧴', name:'Shampoo',           sku:'SH-0250', category:'কসমেটিকস', purchase:210, sell:250, stock:9},
+    {id:uid(), emoji:'🍚', name:'Miniket Rice 5kg', sku:'RC-5001', purchase:320, sell:350, stock:24},
+    {id:uid(), emoji:'🧴', name:'Soybean Oil 2L',   sku:'OL-2002', purchase:165, sell:180, stock:18},
+    {id:uid(), emoji:'🧼', name:'Lux Soap',          sku:'SP-0065', purchase:55,  sell:65,  stock:12},
+    {id:uid(), emoji:'🍪', name:'Family Biscuit',    sku:'BS-0080', purchase:65,  sell:80,  stock:31},
+    {id:uid(), emoji:'🥤', name:'Coca Cola 1L',      sku:'CC-0120', purchase:100, sell:120, stock:20},
+    {id:uid(), emoji:'🧴', name:'Shampoo',           sku:'SH-0250', purchase:210, sell:250, stock:9},
   ];
   return {
     invoiceCounter: 1026,
@@ -163,9 +163,11 @@ let state = defaultState(); // placeholder — real data loads from Firestore af
 let unsubscribeState = null;
 let isRemoteUpdate = false;
 let currentUid = null;
+let currentShopId = null;
+let currentRole = 'Admin';
 function save(){
-  if(isRemoteUpdate || !currentUid) return; // avoid re-saving remote data, or saving before login
-  if(window.Firebase) window.Firebase.saveState(currentUid, state);
+  if(isRemoteUpdate || !currentShopId) return; // avoid re-saving remote data, or saving before login
+  if(window.Firebase) window.Firebase.saveState(currentShopId, state);
 }
 function emptyState(){
   return {
@@ -179,7 +181,7 @@ function emptyState(){
     purchaseReturns: [],
     sales: [],
     users: [{id:uid(), name:'Admin User', role:'Admin'}],
-    settings: {storeName:'SB POS SYSTEM', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'ধন্যবাদ • আবার আসবেন'},
+    settings: {storeName:'আমার দোকান', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'ধন্যবাদ • আবার আসবেন'},
   };
 }
 async function resetDemoData(){
@@ -194,6 +196,7 @@ async function resetDemoData(){
 let cart = [];
 
 function show(id, el){
+  currentScreenId = id;
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
@@ -208,6 +211,7 @@ function show(id, el){
   document.getElementById('pageTitle').textContent = titles[id] || id;
   if(id==='dashboard') renderDashboard();
   if(id==='pos') resetPOSExtras();
+  if(id==='settings') renderUsersList();
   window.scrollTo(0,0);
 }
 function resetPOSExtras(){
@@ -249,8 +253,9 @@ function submitFormModal(){
   const inputs = document.querySelectorAll('#formModalFields [id^="fm_"]');
   const values = {};
   inputs.forEach(inp=>{ values[inp.id.replace('fm_','')] = inp.value; });
-  const ok = _modalSubmitFn(values);
-  if(ok !== false){ closeFormModal(); }
+  Promise.resolve(_modalSubmitFn(values)).then(ok=>{
+    if(ok !== false){ closeFormModal(); }
+  });
 }
 
 /* ===================== DASHBOARD ===================== */
@@ -488,7 +493,7 @@ function renderProductsTable(){
   body.innerHTML = state.products.map(p=>{
     const statusHtml = p.stock<=8 ? `<span class="danger">Low stock</span>` : `<span class="pill">In stock</span>`;
     return `<tr>
-      <td>${p.emoji} ${p.name}</td><td>${p.sku}</td><td>${p.category||'সাধারণ'}</td><td>${fmt(p.purchase)}</td><td>${fmt(p.sell)}</td><td>${p.stock}</td><td>${statusHtml}</td>
+      <td>${p.emoji} ${p.name}</td><td>${p.sku}</td><td>${fmt(p.purchase)}</td><td>${fmt(p.sell)}</td><td>${p.stock}</td><td>${statusHtml}</td>
       <td style="white-space:nowrap"><button class="link" onclick="openEditProduct('${p.id}')">Edit</button> <button class="link" onclick="printBarcodeLabel('${p.id}')">🏷️ Label</button> <button class="link danger" onclick="deleteProduct('${p.id}')">Delete</button></td>
     </tr>`;
   }).join('');
@@ -504,13 +509,12 @@ function openAddProduct(){
     {id:'emoji', label:'Emoji/Icon', value:'📦'},
     {id:'name', label:'Product Name', value:''},
     {id:'sku', label:'SKU / Barcode', value:''},
-    {id:'category', label:'Category', value:'সাধারণ'},
     {id:'purchase', label:'Purchase Price', type:'number', value:0},
     {id:'sell', label:'Sell Price', type:'number', value:0},
     {id:'stock', label:'Opening Stock', type:'number', value:0},
   ], (v)=>{
     if(!v.name.trim()){ showAlertDialog('প্রোডাক্টের নাম দিন।'); return false; }
-    state.products.push({id:uid(), emoji:v.emoji||'📦', name:v.name, sku:v.sku||('SKU-'+Math.floor(Math.random()*9000+1000)), category:v.category||'সাধারণ', purchase:+v.purchase||0, sell:+v.sell||0, stock:+v.stock||0});
+    state.products.push({id:uid(), emoji:v.emoji||'📦', name:v.name, sku:v.sku||('SKU-'+Math.floor(Math.random()*9000+1000)), purchase:+v.purchase||0, sell:+v.sell||0, stock:+v.stock||0});
     save(); renderProductsTable(); renderPOSGrid(); renderDashboard();
   });
 }
@@ -521,12 +525,11 @@ function openEditProduct(id){
     {id:'emoji', label:'Emoji/Icon', value:p.emoji},
     {id:'name', label:'Product Name', value:p.name},
     {id:'sku', label:'SKU / Barcode', value:p.sku},
-    {id:'category', label:'Category', value:p.category||'সাধারণ'},
     {id:'purchase', label:'Purchase Price', type:'number', value:p.purchase},
     {id:'sell', label:'Sell Price', type:'number', value:p.sell},
     {id:'stock', label:'Stock', type:'number', value:p.stock},
   ], (v)=>{
-    p.emoji=v.emoji; p.name=v.name; p.sku=v.sku; p.category=v.category||'সাধারণ'; p.purchase=+v.purchase||0; p.sell=+v.sell||0; p.stock=+v.stock||0;
+    p.emoji=v.emoji; p.name=v.name; p.sku=v.sku; p.purchase=+v.purchase||0; p.sell=+v.sell||0; p.stock=+v.stock||0;
     save(); renderProductsTable(); renderPOSGrid(); renderDashboard();
   });
 }
@@ -786,21 +789,6 @@ function renderReports(){
     bsBox.innerHTML = bestSellers.length ? bestSellers.map((b,i)=>`<div class="row"><div class="rowleft"><div class="ico">${i+1}</div><div><b>${b.name}</b><div class="sub">${b.qty} pcs বিক্রি</div></div></div><b>${fmt(b.revenue)}</b></div>`).join('') : `<div class="sub" style="padding:15px 0;text-align:center">এই সময়ে কোনো সেল নেই</div>`;
   }
 
-  const catAgg = {};
-  filteredSales.forEach(s=>{
-    s.items.forEach(i=>{
-      const prod = state.products.find(x=>x.name===i.name);
-      const cat = (prod && prod.category) ? prod.category : 'সাধারণ';
-      if(!catAgg[cat]) catAgg[cat] = {name:cat, qty:0, revenue:0};
-      catAgg[cat].qty += i.qty;
-      catAgg[cat].revenue += i.price*i.qty;
-    });
-  });
-  const catList = Object.values(catAgg).sort((a,b)=>b.revenue-a.revenue);
-  const catBox = document.getElementById('categorySalesRows');
-  if(catBox){
-    catBox.innerHTML = catList.length ? catList.map(c=>`<div class="row"><div class="rowleft"><div class="ico">🏷️</div><div><b>${c.name}</b><div class="sub">${c.qty} pcs</div></div></div><b>${fmt(c.revenue)}</b></div>`).join('') : `<div class="sub" style="padding:15px 0;text-align:center">এই সময়ে কোনো সেল নেই</div>`;
-  }
 }
 function exportSalesCSV(){
   if(!state.sales.length){ showAlertDialog('এক্সপোর্ট করার মতো কোনো সেল ডেটা নেই।'); return; }
@@ -824,32 +812,6 @@ function fillSettingsForm(){
     const el = document.getElementById(id);
     if(el) el.value = s[map[id]] !== undefined ? s[map[id]] : (id==='settingVatPercent' ? 0 : '');
   });
-  const preview = document.getElementById('logoPreview');
-  const removeBtn = document.getElementById('removeLogoBtn');
-  if(preview){
-    if(s.logo){ preview.src = s.logo; preview.style.display = 'block'; if(removeBtn) removeBtn.style.display = 'inline'; }
-    else { preview.style.display = 'none'; if(removeBtn) removeBtn.style.display = 'none'; }
-  }
-}
-function handleLogoUpload(e){
-  const file = e.target.files && e.target.files[0];
-  if(!file) return;
-  if(file.size > 1024*1024){ showAlertDialog('ছবির সাইজ ১MB এর কম হতে হবে। ছোট সাইজের ছবি দাও।', {icon:'⚠️'}); e.target.value=''; return; }
-  const reader = new FileReader();
-  reader.onload = function(ev){
-    state.settings.logo = ev.target.result;
-    save();
-    fillSettingsForm();
-    applyBranding();
-    showAlertDialog('লোগো আপলোড হয়ে গেছে।', {icon:'✅'});
-  };
-  reader.readAsDataURL(file);
-}
-function removeLogo(){
-  state.settings.logo = '';
-  save();
-  fillSettingsForm();
-  applyBranding();
 }
 function getShopInitials(name){
   const words = (name||'').trim().split(/\s+/).filter(Boolean);
@@ -886,21 +848,40 @@ function toggleProfileMenu(){
 function closeProfileMenu(){
   document.getElementById('profileModal').classList.remove('show');
 }
+function livePreviewProfileName(){
+  const nameEl = document.getElementById('profileDisplayName');
+  const val = document.getElementById('profileStoreName').value;
+  if(nameEl) nameEl.textContent = val || 'আমার দোকান';
+}
+async function confirmLogout(){
+  const ok = await showConfirmDialog('আপনি কি লগআউট করতে চান?', {icon:'🚪', title:'Logout', okLabel:'হ্যাঁ, লগআউট করো', cancelLabel:'না'});
+  if(ok) doLogout();
+}
 function fillProfileForm(){
   const s = state.settings;
   const emailEl = document.getElementById('loggedInEmail');
   const profEmail = document.getElementById('profileEmail');
   if(profEmail) profEmail.textContent = emailEl ? emailEl.textContent : '';
-  const map = {profileStoreName:'storeName', profileOwnerName:'ownerName', profilePhone:'phone', profileAddress:'address', profileFooterNote:'footerNote', profileVatPercent:'vatPercent', profileReceiptSize:'receiptSize'};
+  const nameEl = document.getElementById('profileDisplayName');
+  if(nameEl) nameEl.textContent = s.storeName || 'আমার দোকান';
+  const map = {profileStoreName:'storeName', profileOwnerName:'ownerName', profilePhone:'phone', profileAddress:'address', profileFooterNote:'footerNote', profileReceiptSize:'receiptSize'};
   Object.keys(map).forEach(id=>{
     const el = document.getElementById(id);
-    if(el) el.value = s[map[id]] !== undefined ? s[map[id]] : (id==='profileVatPercent' ? 0 : '');
+    if(el) el.value = s[map[id]] !== undefined ? s[map[id]] : '';
   });
   const preview = document.getElementById('profileLogoPreview');
+  const placeholder = document.getElementById('profileLogoPlaceholder');
   const removeBtn = document.getElementById('profileRemoveLogoBtn');
   if(preview){
-    if(s.logo){ preview.src = s.logo; preview.style.display = 'block'; if(removeBtn) removeBtn.style.display = 'inline'; }
-    else { preview.style.display = 'none'; if(removeBtn) removeBtn.style.display = 'none'; }
+    if(s.logo){
+      preview.src = s.logo; preview.style.display = 'block';
+      if(placeholder) placeholder.style.display = 'none';
+      if(removeBtn) removeBtn.style.display = 'inline';
+    } else {
+      preview.style.display = 'none';
+      if(placeholder) placeholder.style.display = 'flex';
+      if(removeBtn) removeBtn.style.display = 'none';
+    }
   }
 }
 function handleProfileLogoUpload(e){
@@ -930,7 +911,6 @@ function saveProfileSettings(){
   state.settings.phone = document.getElementById('profilePhone').value;
   state.settings.address = document.getElementById('profileAddress').value;
   state.settings.footerNote = document.getElementById('profileFooterNote').value;
-  state.settings.vatPercent = +document.getElementById('profileVatPercent').value || 0;
   state.settings.receiptSize = document.getElementById('profileReceiptSize').value;
   save();
   fillSettingsForm();
@@ -938,24 +918,52 @@ function saveProfileSettings(){
   showAlertDialog('প্রোফাইল সেভ হয়েছে।', {icon:'✅'});
   closeProfileMenu();
 }
-function renderUsersList(){
+async function renderUsersList(){
   const box = document.getElementById('usersListRows');
-  if(!box) return;
-  box.innerHTML = state.users.map(u=>`<div class="row"><div><b>${u.name}</b><div class="sub">${u.role}</div></div><button class="link danger" onclick="deleteUser('${u.id}')">Remove</button></div>`).join('');
+  if(!box || !currentShopId) return;
+  const [staff, invites] = await Promise.all([
+    window.Firebase.listStaffForOwner(currentShopId),
+    window.Firebase.listInvitesForOwner(currentShopId)
+  ]);
+  let rows = '';
+  staff.forEach(s=>{
+    rows += `<div class="row"><div><b>${s.name || s.email}</b><div class="sub">${s.role} · ${s.email}</div></div><button class="link danger" onclick="removeStaffUser('${s.uid}')">Remove</button></div>`;
+  });
+  invites.forEach(inv=>{
+    rows += `<div class="row"><div><b>${inv.name || inv.email}</b><div class="sub">${inv.role} · ${inv.email} · <span style="color:var(--gold)">লগইনের অপেক্ষায়</span></div></div><button class="link danger" onclick="cancelInvite('${inv.email}')">বাতিল</button></div>`;
+  });
+  box.innerHTML = rows || '<div class="sub" style="padding:10px 0">এখনো কোনো স্টাফ যোগ করা হয়নি।</div>';
 }
 function openAddUser(){
-  openFormModal('নতুন ইউজার যোগ করুন', [
-    {id:'name', label:'User Name', value:''},
-    {id:'role', label:'Role', type:'select', options:[{value:'Admin',label:'Admin'},{value:'Manager',label:'Manager'},{value:'Cashier',label:'Cashier'}], value:'Cashier'},
-  ], (v)=>{
-    if(!v.name.trim()){ showAlertDialog('নাম দিন।'); return false; }
-    state.users.push({id:uid(), name:v.name, role:v.role});
-    save(); renderUsersList();
+  if(currentRole !== 'Admin'){ showAlertDialog('শুধু Admin নতুন স্টাফ যোগ করতে পারবে।'); return; }
+  openFormModal('নতুন স্টাফ যোগ করুন', [
+    {id:'email', label:'Email', value:''},
+    {id:'role', label:'Role', type:'select', options:[{value:'Manager',label:'Manager'},{value:'Cashier',label:'Cashier'}], value:'Cashier'},
+  ], async (v)=>{
+    if(!v.email.trim() || !v.email.includes('@')){ showAlertDialog('সঠিক ইমেইল দিন।'); return false; }
+    try{
+      await window.Firebase.createInvite(v.email, currentShopId, v.role, '');
+      await window.Firebase.createStaffAccount(v.email);
+      showAlertDialog(`"${v.email}" ঠিকানায় পাসওয়ার্ড সেট করার একটা ইমেইল পাঠানো হয়েছে। ওই ইমেইলের লিংক থেকে সে নিজেই পাসওয়ার্ড বসিয়ে লগইন করলেই তোমার দোকানে যুক্ত হয়ে যাবে — কোনো Firebase Console লাগবে না।`, {icon:'✅', title:'স্টাফ যোগ হয়েছে'});
+      renderUsersList();
+    }catch(e){
+      console.error(e);
+      let msg = 'স্টাফ তৈরি করা যায়নি। আবার চেষ্টা করো।';
+      if(e && e.code === 'auth/email-already-in-use') msg = 'এই ইমেইল দিয়ে আগে থেকেই একটা একাউন্ট আছে।';
+      showAlertDialog(msg);
+      return false;
+    }
   });
 }
-function deleteUser(id){
-  state.users = state.users.filter(u=>u.id!==id);
-  save(); renderUsersList();
+async function removeStaffUser(staffUid){
+  const ok = await showConfirmDialog('এই স্টাফকে সরিয়ে দিতে চাও? তার এই দোকানে অ্যাক্সেস বন্ধ হয়ে যাবে।', {danger:true, icon:'⚠️', title:'স্টাফ রিমুভ', okLabel:'হ্যাঁ, রিমুভ করো'});
+  if(!ok) return;
+  await window.Firebase.unlinkStaff(staffUid);
+  renderUsersList();
+}
+async function cancelInvite(email){
+  await window.Firebase.deleteInvite(email);
+  renderUsersList();
 }
 
 /* ===================== INIT ===================== */
@@ -974,7 +982,6 @@ function renderAll(){
   renderReturnsTable();
   renderReports();
   fillSettingsForm();
-  renderUsersList();
 }
 /* ===================== AUTH / FIREBASE BOOTSTRAP ===================== */
 function showApp(){
@@ -1001,23 +1008,68 @@ async function doLogin(){
 function doLogout(){
   if(unsubscribeState){ unsubscribeState(); unsubscribeState = null; }
   currentUid = null;
+  currentShopId = null;
+  currentRole = 'Admin';
   window.Firebase.logout();
 }
-function initAfterAuth(user){
+function applyRolePermissions(){
+  const allowedByRole = {
+    dashboard: ['Admin','Manager','Cashier'],
+    pos: ['Admin','Manager','Cashier'],
+    products: ['Admin','Manager'],
+    customers: ['Admin','Manager','Cashier'],
+    ledger: ['Admin','Manager','Cashier'],
+    cash: ['Admin','Manager'],
+    purchases: ['Admin','Manager'],
+    returns: ['Admin','Manager'],
+    reports: ['Admin','Manager'],
+    settings: ['Admin']
+  };
+  document.querySelectorAll('[data-screen]').forEach(btn=>{
+    const id = btn.getAttribute('data-screen');
+    const allowed = allowedByRole[id] ? allowedByRole[id].includes(currentRole) : true;
+    btn.style.display = allowed ? '' : 'none';
+  });
+  if(!allowedByRole[currentScreenId] || !allowedByRole[currentScreenId].includes(currentRole)){
+    show('dashboard');
+  }
+}
+let currentScreenId = 'dashboard';
+async function initAfterAuth(user){
   showApp();
   const emailEl = document.getElementById('loggedInEmail');
   if(emailEl) emailEl.textContent = user.email;
   currentUid = user.uid;
-  window.Firebase.loadState(currentUid).then(async remote=>{
+
+  // এই ইউজার কি কারো দোকানের স্টাফ? আগে লিংক আছে কিনা দেখো, না থাকলে ইনভাইট চেক করো
+  let link = await window.Firebase.getStaffLink(user.uid);
+  if(!link){
+    const invite = await window.Firebase.getInvite(user.email);
+    if(invite){
+      await window.Firebase.linkStaff(user.uid, invite.ownerUid, invite.role, invite.name, user.email);
+      await window.Firebase.deleteInvite(user.email);
+      link = { ownerUid: invite.ownerUid, role: invite.role, name: invite.name };
+    }
+  }
+  if(link){
+    currentShopId = link.ownerUid;
+    currentRole = link.role || 'Cashier';
+  } else {
+    currentShopId = user.uid; // স্বাধীন মালিক — নিজের দোকান
+    currentRole = 'Admin';
+  }
+  applyRolePermissions();
+
+  window.Firebase.loadState(currentShopId).then(async remote=>{
     if(remote){
       state = remote;
     } else {
       state = emptyState();
-      await window.Firebase.saveState(currentUid, state);
+      await window.Firebase.saveState(currentShopId, state);
     }
     renderAll();
     if(unsubscribeState) unsubscribeState();
-    unsubscribeState = window.Firebase.watchState(currentUid, function(remoteState){
+    unsubscribeState = window.Firebase.watchState(currentShopId, function(remoteState){
       isRemoteUpdate = true;
       state = remoteState;
       renderAll();
@@ -1140,7 +1192,7 @@ function renderBarcodeLabelsAndPrint(items){
   area.innerHTML = items.map(it=>buildBarcodeLabelHTML(it.product, it.qty)).join('');
   area.querySelectorAll('svg.bl-svg').forEach(svg=>{
     try{
-      JsBarcode(svg, svg.dataset.sku, {format:'CODE128', displayValue:true, fontSize:10, height:32, width:1.5, margin:2});
+      JsBarcode(svg, svg.dataset.sku, {format:'CODE128', displayValue:true, fontSize:8, height:24, width:1.1, margin:2});
     }catch(e){ /* skip invalid code */ }
   });
   document.body.classList.add('printing-labels');
