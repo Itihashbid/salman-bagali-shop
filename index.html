@@ -74,6 +74,7 @@
   <button data-screen="returns" onclick="show('returns',this)">↩ &nbsp; Sales Return</button>
   <button data-screen="reports" onclick="show('reports',this)">⌁ &nbsp; Reports</button>
   <button data-screen="settings" onclick="show('settings',this)">⚙ &nbsp; Settings</button>
+  <button data-screen="admin" onclick="show('admin',this)">👑 &nbsp; Admin Panel</button>
  </nav>
 </aside>
 <main>
@@ -190,6 +191,23 @@
 
 <section id="settings" class="screen"><div class="grid"><div class="panel"><div class="head"><h2>Store Settings</h2></div><div class="formgrid"><div class="field"><label>Store Name</label><input id="settingStoreName"></div><div class="field"><label>Owner Name</label><input id="settingOwnerName"></div><div class="field"><label>Phone</label><input id="settingPhone"></div><div class="field"><label>Receipt Size</label><select id="settingReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div><div class="field" style="grid-column:1/-1"><label>Address</label><input id="settingAddress"></div><div class="field" style="grid-column:1/-1"><label>Receipt Footer Note</label><input id="settingFooterNote"></div><div class="field"><label>Default VAT %</label><input id="settingVatPercent" type="number" min="0" step="0.01"></div></div>
 <div style="display:flex;gap:9px;margin-top:15px"><button class="btn primary" onclick="saveSettings()">Save Settings</button><button class="btn soft" id="resetDataBtn" onclick="resetDemoData()">🗑️ Reset All Data &amp; Start Fresh</button></div></div><div class="panel"><div class="head"><h2>Users & Permissions</h2><button class="btn primary" id="addUserBtn" onclick="openAddUser()">＋ Add User</button></div><div class="rows" id="usersListRows"></div></div></div></section>
+
+<section id="admin" class="screen">
+  <div class="panel">
+    <div class="head"><h2>👑 Super Admin Dashboard</h2></div>
+    <div class="cards" style="margin-bottom:15px">
+      <div class="card"><div class="label">Total Shops</div><div class="num" id="adminTotalShops">0</div></div>
+      <div class="card"><div class="label">Total Staff (Linked)</div><div class="num" id="adminTotalStaff">0</div></div>
+      <div class="card"><div class="label">Total Invites Pending</div><div class="num" id="adminTotalInvites">0</div></div>
+    </div>
+    <div class="tablewrap">
+      <table class="table">
+        <thead><tr><th>Shop Owner</th><th>Email</th><th>Products</th><th>Sales</th><th>Staff</th><th>Last Updated</th></tr></thead>
+        <tbody id="adminShopsTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
 
 </main>
 </div>

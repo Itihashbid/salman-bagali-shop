@@ -18,6 +18,9 @@ function fmt(n){
 }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
+// ===== SUPER ADMIN UID (আপনার নিজের Firebase UID) =====
+const SUPER_ADMIN_UID = 'xQn7OHwRa1eKl96IaSROwiv3P8E3';
+
 /* ===================== PREMIUM DIALOG SYSTEM (replaces alert/confirm/prompt) ===================== */
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function ensureDialogRoot(){
@@ -162,65 +165,7 @@ function productIconHTML(p, size){
   return `<span style="font-size:${Math.round(size*0.62)}px;line-height:1;vertical-align:middle">${(p && p.emoji) || '📦'}</span>`;
 }
 
-function defaultState(){
-  const categories = [{id:uid(), name:'Grocery'}, {id:uid(), name:'Cosmetics'}, {id:uid(), name:'Snacks'}, {id:uid(), name:'Beverage'}];
-  const brands = [{id:uid(), name:'Miniket'}, {id:uid(), name:'Generic'}, {id:uid(), name:'Lux'}, {id:uid(), name:'Coca-Cola'}];
-  const units = [{id:uid(), name:'Pieces (Pcs)'}, {id:uid(), name:'KG'}, {id:uid(), name:'Liter'}, {id:uid(), name:'Gram'}];
-  const products = [
-    {id:uid(), emoji:'🍚', name:'Miniket Rice 5kg', sku:'RC-5001', purchase:320, sell:350, stock:24, category:'Grocery', brand:'Miniket', unit:'Pieces (Pcs)', productType:'simple', variations:[]},
-    {id:uid(), emoji:'🧴', name:'Soybean Oil 2L',   sku:'OL-2002', purchase:165, sell:180, stock:18, category:'Grocery', brand:'Generic', unit:'Pieces (Pcs)', productType:'simple', variations:[]},
-    {id:uid(), emoji:'🧼', name:'Lux Soap',          sku:'SP-0065', purchase:0, sell:0, stock:0, category:'Cosmetics', brand:'Lux', unit:'Pieces (Pcs)', productType:'variable', variations:[
-      {id:uid(), value:'100gm', sku:'SP-0065-1', purchase:55, sell:65, stock:12},
-      {id:uid(), value:'150gm', sku:'SP-0065-2', purchase:75, sell:90, stock:8},
-      {id:uid(), value:'200gm', sku:'SP-0065-3', purchase:95, sell:115, stock:6},
-    ]},
-    {id:uid(), emoji:'🍪', name:'Family Biscuit',    sku:'BS-0080', purchase:65,  sell:80,  stock:31, category:'Snacks', brand:'Generic', unit:'Pieces (Pcs)', productType:'simple', variations:[]},
-    {id:uid(), emoji:'🥤', name:'Coca Cola 1L',      sku:'CC-0120', purchase:100, sell:120, stock:20, category:'Beverage', brand:'Coca-Cola', unit:'Pieces (Pcs)', productType:'simple', variations:[]},
-    {id:uid(), emoji:'🧴', name:'Shampoo',           sku:'SH-0250', purchase:210, sell:250, stock:9, category:'Cosmetics', brand:'Generic', unit:'Pieces (Pcs)', productType:'simple', variations:[]},
-  ];
-  return {
-    invoiceCounter: 1026,
-    products, categories, brands, units,
-    customers: [
-      {id:uid(), name:'Rahim Uddin', mobile:'01712345678', address:'Mirpur, Dhaka', totalPurchase:18450, due:1250, lastPurchase:'Today'},
-      {id:uid(), name:'Karim Mia',   mobile:'01819345678', address:'Jatrabari, Dhaka', totalPurchase:12200, due:950,  lastPurchase:'Today'},
-      {id:uid(), name:'Nila Begum',  mobile:'01911345678', address:'Savar, Dhaka', totalPurchase:9880,  due:1000, lastPurchase:'Yesterday'},
-    ],
-    ledger: [
-      {date:todayStr(), customer:'Rahim Uddin', invoice:'#1025', debit:1450, credit:1000, balance:1250},
-      {date:todayStr(), customer:'Karim Mia',   invoice:'#1019', debit:950,  credit:0,    balance:950},
-      {date:todayStr(), customer:'Nila Begum',  invoice:'#1023', debit:1000, credit:0,    balance:1000},
-    ],
-    cash: [
-      {time: nowTime(), desc:'Opening Cash', type:'in', amount:5000},
-      {time: nowTime(), desc:'Sale #1025', type:'in', amount:1450},
-      {time: nowTime(), desc:'Transport', type:'out', amount:500},
-      {time: nowTime(), desc:'Due Collection · Rahim', type:'in', amount:1000},
-    ],
-    purchases: [
-      {id:uid(), date:'28 Aug', supplier:'ABC Traders', invoice:'P-3021', productId:products[0].id, productName:products[0].name, items:12, total:18500, status:'Received'},
-      {id:uid(), date:'26 Aug', supplier:'Rahman Enterprise', invoice:'P-3018', productId:products[1].id, productName:products[1].name, items:8, total:9200, status:'Received'},
-    ],
-    suppliers: [
-      {id:uid(), name:'ABC Traders', phone:'01711223344', address:'Karwan Bazar, Dhaka'},
-      {id:uid(), name:'Rahman Enterprise', phone:'01822334455', address:'Chittagong'},
-    ],
-    returns: [],
-    purchaseReturns: [],
-    sales: [
-      {invoice:'#1025', customer:'Rahim Uddin', time:'8:42 PM', date:todayStr(), items:[{name:'Miniket Rice 5kg',price:350,qty:2},{name:'Lux Soap',price:65,qty:2}], total:1450, payment:'Due'},
-      {invoice:'#1024', customer:'Walk-in Customer', time:'8:18 PM', date:todayStr(), items:[{name:'Coca Cola 1L',price:120,qty:1},{name:'Family Biscuit',price:80,qty:1}], total:820, payment:'Cash'},
-      {invoice:'#1023', customer:'Nila Begum', time:'7:55 PM', date:todayStr(), items:[{name:'Shampoo',price:250,qty:2},{name:'Soybean Oil 2L',price:180,qty:1},{name:'Lux Soap',price:65,qty:2}], total:2180, payment:'Due'},
-    ],
-    users: [
-      {id:uid(), name:'Admin User', role:'Admin'},
-      {id:uid(), name:'Store Cashier', role:'Cashier'},
-    ],
-    settings: {storeName:'SALMAN BANGALI SHOP', phone:'017XXXXXXXX', address:'Your shop address', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'Thank you • Visit Again'},
-  };
-}
-
-let state = defaultState(); // placeholder — real data loads from Firestore after login
+let state = emptyState(); // এখন আর ডেমো ডেটা থাকবে না — real data loads from Firestore after login
 let unsubscribeState = null;
 let isRemoteUpdate = false;
 let currentUid = null;
@@ -279,6 +224,7 @@ function show(id, el){
   if(id==='pos') resetPOSExtras();
   if(id==='barcodePrint') renderBarcodePrintScreen();
   if(id==='settings') renderUsersList();
+  if(id==='admin') renderAdminPanel();
   window.scrollTo(0,0);
 }
 function resetPOSExtras(){
@@ -1570,6 +1516,58 @@ async function cancelInvite(email){
   renderUsersList();
 }
 
+/* ===================== SUPER ADMIN PANEL (all-shops overview) ===================== */
+async function renderAdminPanel(){
+  if(currentUid !== SUPER_ADMIN_UID) return;
+  const tbody = document.getElementById('adminShopsTableBody');
+  if(!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="6" class="sub">Loading shops...</td></tr>';
+
+  try {
+    const shopsRaw = await window.Firebase.listAllShops();
+    const shops = shopsRaw.map(doc => {
+      const stateData = doc.data || {};
+      const productCount = stateData.products ? stateData.products.length : 0;
+      const salesCount = stateData.sales ? stateData.sales.length : 0;
+      const staffCount = stateData.users ? stateData.users.filter(u => u.role !== 'Admin').length : 0;
+      return {
+        id: doc.id,
+        ownerEmail: doc.ownerEmail || 'N/A',
+        products: productCount,
+        sales: salesCount,
+        staff: staffCount,
+        updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toLocaleString() : 'Never'
+      };
+    });
+
+    const totalShopsEl = document.getElementById('adminTotalShops');
+    if(totalShopsEl) totalShopsEl.textContent = shops.length;
+    let totalStaff = 0;
+    shops.forEach(s => totalStaff += s.staff);
+    const totalStaffEl = document.getElementById('adminTotalStaff');
+    if(totalStaffEl) totalStaffEl.textContent = totalStaff;
+
+    const totalInvitesEl = document.getElementById('adminTotalInvites');
+    if(totalInvitesEl) totalInvitesEl.textContent = await window.Firebase.countInvites();
+
+    tbody.innerHTML = shops.length ? shops.map(s => `
+      <tr>
+        <td><strong>${s.id}</strong></td>
+        <td>${s.ownerEmail}</td>
+        <td>${s.products}</td>
+        <td>${s.sales}</td>
+        <td>${s.staff}</td>
+        <td>${s.updatedAt}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="6" class="sub">No shops found.</td></tr>';
+
+  } catch(e) {
+    console.error(e);
+    tbody.innerHTML = '<tr><td colspan="6" class="danger">Error loading data.</td></tr>';
+  }
+}
+
 /* ===================== INIT ===================== */
 function renderAll(){
   ensureMetaLists();
@@ -1623,15 +1621,24 @@ function applyPermissions(){
   const effective = currentRole==='Admin'
     ? PERMISSION_SCREENS.map(s=>s.key)
     : (Array.isArray(currentPermissions) && currentPermissions.length ? currentPermissions : (ROLE_DEFAULT_PERMISSIONS[currentRole] || []));
+
   document.querySelectorAll('[data-screen]').forEach(btn=>{
     const id = btn.getAttribute('data-screen');
-    btn.style.display = effective.includes(id) ? '' : 'none';
+    // অ্যাডমিন প্যানেল বাটন শুধুমাত্র সুপার অ্যাডমিন দেখতে পাবে
+    if(id === 'admin') {
+      btn.style.display = (currentUid === SUPER_ADMIN_UID) ? '' : 'none';
+    } else {
+      btn.style.display = effective.includes(id) ? '' : 'none';
+    }
   });
+
   const addUserBtn = document.getElementById('addUserBtn');
   if(addUserBtn) addUserBtn.style.display = currentRole==='Admin' ? '' : 'none';
+
   const resetBtn = document.getElementById('resetDataBtn');
   if(resetBtn) resetBtn.style.display = currentRole==='Admin' ? '' : 'none';
-  if(!effective.includes(currentScreenId)){
+
+  if(!effective.includes(currentScreenId) && currentScreenId !== 'admin'){
     show('dashboard');
   }
 }

@@ -50,7 +50,13 @@ window.Firebase = {
   async saveState(shopId, stateObj){
     if(!shopId) return;
     try{
-      await setDoc(stateDocFor(shopId), { data: stateObj, updatedAt: Date.now() });
+      const user = auth.currentUser;
+      await setDoc(stateDocFor(shopId), { 
+        data: stateObj, 
+        updatedAt: Date.now(),
+        ownerUid: user ? user.uid : null,
+        ownerEmail: user ? user.email : null
+      }, { merge: true });
     }catch(e){
       console.warn('Firestore save failed', e);
     }
@@ -110,6 +116,27 @@ window.Firebase = {
     const list = [];
     snap.forEach(d => list.push({ uid: d.id, ...d.data() }));
     return list;
+  },
+
+  // ===== সুপার অ্যাডমিনের জন্য এক্সট্রা ফাংশন =====
+  async listAllShops(){
+    const snapshot = await getDocs(collection(db, "posData"));
+    const shops = [];
+    snapshot.forEach(doc => {
+      const raw = doc.data();
+      shops.push({
+        id: doc.id,
+        data: raw.data || null,         // পুরো POS স্টেট
+        ownerEmail: raw.ownerEmail || null,
+        ownerUid: raw.ownerUid || null,
+        updatedAt: raw.updatedAt || null
+      });
+    });
+    return shops;
+  },
+  async countInvites(){
+    const snapshot = await getDocs(collection(db, "staffInvites"));
+    return snapshot.size; // মোট ইনভাইট সংখ্যা
   }
 };
 
