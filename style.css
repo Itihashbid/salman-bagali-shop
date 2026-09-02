@@ -13,16 +13,16 @@ main{margin-left:246px;width:calc(100% - 246px);padding:26px 30px 60px}.top{disp
 #cameraScanBtn{white-space:nowrap}
 #barcodePrintArea{display:none}
 @media print{
-  @page{ size:1.5in 1in; margin:0; }
   body.printing-labels *{visibility:hidden}
   body.printing-labels #barcodePrintArea,body.printing-labels #barcodePrintArea *{visibility:visible}
   body.printing-labels #barcodePrintArea{display:block !important;position:absolute;top:0;left:0;width:100%;margin:0;padding:0}
 }
-.barcodeLabel{width:1.5in;height:1in;padding:1mm;border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0;text-align:center;page-break-after:always;break-after:page;background:#fff;overflow:hidden}
-.barcodeLabel:last-child{page-break-after:auto;break-after:auto}
-.bl-name{font-size:8px;font-weight:700;margin-bottom:0.5mm;max-width:1.4in;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111}
-.bl-svg{max-width:1.4in;max-height:0.6in}
-.bl-price{font-size:9px;font-weight:800;margin-top:0.5mm;color:#111}
+.barcodeLabelPage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;page-break-after:always;break-after:page;box-sizing:border-box}
+.barcodeLabelPage:last-child{page-break-after:auto;break-after:auto}
+.barcodeLabel{width:100%;height:100%;padding:1.2mm;border:0.3mm dashed #999;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:#fff;box-sizing:border-box;overflow:hidden}
+.bl-name{font-size:7.5px;font-weight:700;margin-bottom:0.8mm;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111}
+.bl-svg{max-width:96%;max-height:62%}
+.bl-price{font-size:8.5px;font-weight:800;margin-top:0.8mm;color:#111}
 .pos{display:grid;grid-template-columns:1fr 390px;gap:15px}.products{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.product{padding:15px;background:white;border:1px solid var(--line);border-radius:15px;text-align:left;cursor:pointer}.product:hover{border-color:var(--green)}.product .emoji{font-size:24px}.product b{display:block;margin-top:8px}.product small{color:var(--muted)}.cart{position:sticky;top:15px}.cartline{display:grid;grid-template-columns:1fr 55px 75px;gap:8px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}.qty{display:flex;gap:6px;align-items:center}.qty button{width:23px;height:23px;border:1px solid var(--line);border-radius:6px;background:#fff}.totalbox{margin-top:15px;border-top:1px dashed var(--line);padding-top:13px}.totalrow{display:flex;justify-content:space-between;margin:8px 0}.grand{font-size:20px;font-weight:800}.paygrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:14px 0}.paygrid button{padding:10px;border:1px solid var(--line);background:white;border-radius:9px}.paygrid button.selected{background:#edf3ef;border-color:var(--green);color:var(--green);font-weight:bold}.print{width:100%;padding:14px;border:0;border-radius:11px;background:var(--green);color:white;font-weight:800}
 .modal{position:fixed;inset:0;background:#28251f66;display:none;align-items:center;justify-content:center;z-index:20;padding:16px;box-sizing:border-box}.modal.show{display:flex}.receiptWrap{background:#fff;padding:18px;border-radius:15px;box-sizing:border-box;max-width:94vw;max-height:92vh;overflow-x:hidden}.receipt{width:300px;background:white;color:#111;padding:10px;font-family:"Courier New",monospace;font-size:11px}.receipt h3{text-align:center;margin:4px 0;font-size:17px}.receipt p{text-align:center;margin:3px}.dash{border-top:1px dashed #111;margin:9px 0}.rline{display:flex;justify-content:space-between;margin:5px 0}.rgrand{font-size:14px;font-weight:bold}.modalBtns{display:flex;gap:8px;margin-top:12px}.modalBtns button{flex:1}
 .formgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;min-width:0}.field{display:grid;gap:5px;margin-top:10px;min-width:0}.field label{font-size:11px;color:var(--muted)}.field input,.field select{padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff;width:100%;min-width:0;box-sizing:border-box}

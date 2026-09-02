@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -35,10 +35,10 @@
     <button onclick="document.getElementById('profileLogoFile').click()" title="Add Logo" style="position:absolute;bottom:0;right:0;width:26px;height:26px;border-radius:50%;background:var(--green);color:#fff;border:3px solid #fff;cursor:pointer;font-size:14px;line-height:1;padding:0">+</button>
     <input type="file" id="profileLogoFile" accept="image/*" onchange="handleProfileLogoUpload(event)" style="display:none">
    </div>
-   <h2 id="profileDisplayName" style="margin:8px 0 0;font-size:17px">আমার দোকান</h2>
+   <h2 id="profileDisplayName" style="margin:8px 0 0;font-size:17px">My Shop</h2>
    <p class="sub" id="profileStoreSubtitle" style="margin:1px 0 4px;font-weight:600"></p>
    <p class="sub" id="profileEmail" style="margin:0 0 2px"></p>
-   <button class="link danger" id="profileRemoveLogoBtn" style="display:none;margin-bottom:4px;font-size:11px" onclick="removeProfileLogo()">লোগো সরাও</button>
+   <button class="link danger" id="profileRemoveLogoBtn" style="display:none;margin-bottom:4px;font-size:11px" onclick="removeProfileLogo()">Remove Logo</button>
   </div>
   <div style="padding:10px 20px 0;max-height:48vh;overflow-y:auto">
    <div class="formgrid">
@@ -66,6 +66,7 @@
   <button class="active" data-screen="dashboard" onclick="show('dashboard',this)">⌂ &nbsp; Dashboard</button>
   <button data-screen="pos" onclick="show('pos',this)">🛒 &nbsp; New Sale / POS</button>
   <button data-screen="products" onclick="show('products',this)">▣ &nbsp; Products & Stock</button>
+  <button data-screen="barcodePrint" onclick="show('barcodePrint',this)">🏷 &nbsp; Barcode Print</button>
   <button data-screen="customers" onclick="show('customers',this)">♙ &nbsp; Customers</button>
   <button data-screen="ledger" onclick="show('ledger',this)">৳ &nbsp; Due / Ledger</button>
   <button data-screen="cash" onclick="show('cash',this)">◈ &nbsp; Cash Flow</button>
@@ -80,24 +81,30 @@
 
 <section id="dashboard" class="screen active">
  <div class="cards">
-  <div class="card"><div class="label">আজকের বিক্রি</div><div class="num" id="statTodaySales">৳0</div><div class="up">Live</div></div>
-  <div class="card"><div class="label">আজকের বাকি</div><div class="num" id="statTodayDue">৳0</div><div class="up" id="statTodayDueSub">0 customers</div></div>
-  <div class="card"><div class="label">আজকের খরচ</div><div class="num" id="statTodayExpense">৳0</div><div class="up" id="statTodayExpenseSub">0 transactions</div></div>
+  <div class="card"><div class="label">Today's Sales</div><div class="num" id="statTodaySales">৳0</div><div class="up">Live</div></div>
+  <div class="card"><div class="label">Today's Due</div><div class="num" id="statTodayDue">৳0</div><div class="up" id="statTodayDueSub">0 customers</div></div>
+  <div class="card"><div class="label">Today's Expense</div><div class="num" id="statTodayExpense">৳0</div><div class="up" id="statTodayExpenseSub">0 transactions</div></div>
   <div class="card"><div class="label">Cash Balance</div><div class="num" id="statCashBalance">৳0</div><div class="up">Closing estimate</div></div>
  </div>
  <div style="display:flex;gap:9px;margin-top:15px"><button class="btn primary" onclick="show('pos')">＋ New Sale</button><button class="btn soft" onclick="show('products')">＋ Add Product</button><button class="btn soft" onclick="show('ledger')">৳ Collect Due</button></div>
  <div class="grid">
-  <div class="panel"><div class="head"><h2>Sales Overview</h2><button class="link">Last 7 days⌄</button></div><div style="height:190px;display:flex;align-items:end;gap:10px;border-bottom:1px solid var(--line);padding:10px 5px">
-   <i style="height:45%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:62%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:40%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:72%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:55%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:86%;flex:1;background:var(--green);border-radius:6px 6px 0 0"></i><i style="height:67%;flex:1;background:var(--gold);border-radius:6px 6px 0 0"></i>
-  </div></div>
+  <div class="panel"><div class="head"><h2>Sales Overview</h2><select id="dashboardChartRange" onchange="renderDashboard()" style="border:0;background:none;color:var(--green);font-size:11px;font-weight:700;cursor:pointer;padding:4px 0;outline:none">
+    <option value="7">Last 7 days</option>
+    <option value="14">Last 14 days</option>
+    <option value="30">Last 30 days</option>
+  </select></div>
+  <div id="salesOverviewChart" style="height:190px;display:flex;align-items:end;gap:10px;border-bottom:1px solid var(--line);padding:10px 5px"></div>
+  <div id="salesOverviewLabels" style="display:flex;gap:10px;padding:5px 5px 0"></div>
+  </div>
   <div class="panel"><div class="head"><h2>⚠ Low Stock</h2><button class="link" onclick="show('products')">View all</button></div><div class="rows" id="lowStockRows"></div></div>
  </div>
  <div class="grid"><div class="panel"><div class="head"><h2>Recent Sales</h2><button class="link" onclick="show('reports')">View all</button></div><div class="rows" id="recentSalesRows"></div></div><div class="panel"><div class="head"><h2>Due Customers</h2><button class="link" onclick="show('ledger')">Ledger</button></div><div class="rows" id="dueCustomersRows"></div></div></div>
+ <div class="grid" style="margin-top:15px"><div class="panel"><div class="head"><h2>🏆 Top 10 Selling Products</h2></div><div class="rows" id="topProductsRows"></div></div><div class="panel"><div class="head"><h2>👑 Top 10 Customers</h2></div><div class="rows" id="topCustomersRows"></div></div></div>
 </section>
 
 <section id="pos" class="screen">
  <div class="pos">
-  <div class="panel"><div class="head"><h2>New Sale · POS Billing</h2><span class="pill">Register #01</span></div><div class="toolbar"><input class="search" id="search" oninput="filterProducts()" onkeydown="handleScanEnter(event)" placeholder="🔍 Search product or scan barcode (scan করে Enter চাপুন)..."><button class="btn soft" id="cameraScanBtn" onclick="openCameraScanner()" title="ক্যামেরা দিয়ে বারকোড স্ক্যান করুন">📷 Scan</button></div>
+  <div class="panel"><div class="head"><h2>New Sale · POS Billing</h2><span class="pill">Register #01</span></div><div class="toolbar"><input class="search" id="search" oninput="filterProducts()" onkeydown="handleScanEnter(event)" placeholder="🔍 Search product or scan barcode (scan then press Enter)..."><button class="btn soft" id="cameraScanBtn" onclick="openCameraScanner()" title="Scan barcode with camera">📷 Scan</button></div>
    <div class="products" id="productGrid"></div>
   </div>
   <div class="panel cart"><div class="head"><h2>Current Cart</h2><button class="link" onclick="cart=[];renderCart()">Clear</button></div><div id="cart"></div><div class="totalbox">
@@ -108,8 +115,17 @@
    <div class="totalrow"><span>VAT (<span id="vatPercentShow">0</span>%)</span><b id="vatShow">৳0</b></div>
    <div class="totalrow grand"><span>Total</span><b id="total">৳0</b></div>
    <div class="field" style="margin-top:12px"><label>Customer (optional)</label><select id="posCustomer"><option>Walk-in Customer</option></select></div>
-   <div class="field"><label>Payment split</label><div class="inline2"><input type="number" id="payCash" min="0" value="0" oninput="renderCart()" placeholder="Cash ৳"><input type="number" id="payBkash" min="0" value="0" oninput="renderCart()" placeholder="bKash ৳"></div></div>
-   <div class="paygrid"><button onclick="quickPay('cash')">Full Cash</button><button onclick="quickPay('bkash')">Full bKash</button><button onclick="quickPay('due')">Full Due</button></div>
+   <div class="field"><label>Payment split</label><div class="formgrid" style="grid-template-columns:repeat(2,1fr);gap:6px;margin-top:0">
+    <input type="number" id="payCash" min="0" value="0" oninput="renderCart()" placeholder="💵 Cash ৳">
+    <input type="number" id="payBkash" min="0" value="0" oninput="renderCart()" placeholder="📱 bKash ৳">
+    <input type="number" id="payNagad" min="0" value="0" oninput="renderCart()" placeholder="📲 Nagad ৳">
+    <input type="number" id="payBank" min="0" value="0" oninput="renderCart()" placeholder="🏦 Bank ৳">
+    <input type="number" id="payCard" min="0" value="0" oninput="renderCart()" placeholder="💳 Card ৳" style="grid-column:1/-1">
+   </div></div>
+   <div class="paygrid" style="grid-template-columns:repeat(3,1fr)">
+    <button onclick="quickPay('cash')">Full Cash</button><button onclick="quickPay('bkash')">Full bKash</button><button onclick="quickPay('nagad')">Full Nagad</button>
+    <button onclick="quickPay('bank')">Full Bank</button><button onclick="quickPay('card')">Full Card</button><button onclick="quickPay('due')">Full Due</button>
+   </div>
    <div class="totalrow"><span>Paid</span><b id="paidShow">৳0</b></div>
    <div class="totalrow"><span>Due</span><b id="dueShow" class="danger">৳0</b></div>
    <button class="print" onclick="openReceipt()">🧾 PAY & PRINT RECEIPT</button>
@@ -117,16 +133,38 @@
  </div>
 </section>
 
-<section id="products" class="screen"><div class="panel"><div class="head"><h2>Products & Inventory</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn soft" onclick="downloadProductTemplate()">📄 Template</button><button class="btn soft" onclick="document.getElementById('excelImportInput').click()">📥 Excel/CSV ইমপোর্ট</button><button class="btn soft" onclick="printAllBarcodeLabels()">🏷️ সব লেবেল প্রিন্ট</button><button class="btn primary" onclick="openAddProduct()">＋ Add Product</button></div></div><input type="file" id="excelImportInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)"><div class="toolbar"><input class="search" id="productSearch" oninput="filterProductsTable()" placeholder="🔍 Search products, SKU or barcode"></div><div class="tablewrap"><table class="table"><thead><tr><th>Product</th><th>SKU / Barcode</th><th>Purchase</th><th>Sell</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="productsTableBody"></tbody></table></div></div></section>
+<section id="products" class="screen"><div class="panel"><div class="head"><h2>Products & Inventory</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn soft" onclick="openManageMeta()">🗂️ Categories/Brands/Units</button><button class="btn soft" onclick="downloadProductTemplate()">📄 Template</button><button class="btn soft" onclick="document.getElementById('excelImportInput').click()">📥 Excel/CSV Import</button><button class="btn soft" onclick="printAllBarcodeLabels()">🏷️ Print All Labels</button><button class="btn primary" onclick="openAddProduct()">＋ Add Product</button></div></div><input type="file" id="excelImportInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)"><div class="toolbar"><input class="search" id="productSearch" oninput="filterProductsTable()" placeholder="🔍 Search products, SKU or barcode"></div><div class="tablewrap"><table class="table"><thead><tr><th>Product</th><th>SKU / Barcode</th><th>Purchase</th><th>Sell</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="productsTableBody"></tbody></table></div></div></section>
+<section id="barcodePrint" class="screen">
+ <div class="panel">
+  <div class="head"><h2>Barcode Print</h2><button class="btn primary" onclick="previewAndPrintLabels()">🖨️ Preview / Print</button></div>
+  <div class="toolbar"><input class="search" id="labelProductSearch" oninput="filterLabelProductsTable()" placeholder="🔍 Search products, SKU or barcode"><button class="btn soft" onclick="toggleAllLabelProducts(true)">Select All</button><button class="btn soft" onclick="toggleAllLabelProducts(false)">Clear</button></div>
+  <div class="tablewrap"><table class="table"><thead><tr><th style="width:36px"></th><th>Product</th><th>SKU</th><th>Stock</th><th style="width:110px">Print Qty</th></tr></thead><tbody id="labelProductsTableBody"></tbody></table></div>
+ </div>
+ <div class="panel" style="margin-top:15px">
+  <div class="head"><h2>Information to show in Labels</h2></div>
+  <div class="rows" id="labelInfoFieldsRows"></div>
+ </div>
+ <div class="panel" style="margin-top:15px">
+  <div class="head"><h2>Barcode Setting</h2></div>
+  <div class="formgrid">
+   <div class="field"><label>Print Layout</label><select id="labelLayoutSelect">
+     <option value="roll">Thermal Roll Printer (one label = one page)</option>
+     <option value="a4">A4 Sheet (grid of labels per page)</option>
+   </select></div>
+   <div class="field"><label>Label Size</label><select id="labelSizeSelect"></select></div>
+  </div>
+ </div>
+</section>
 
-<section id="customers" class="screen"><div class="panel"><div class="head"><h2>Customers</h2><button class="btn primary" onclick="openAddCustomer()">＋ New Customer</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Customer</th><th>Mobile</th><th>Total Purchase</th><th>Due</th><th>Last Purchase</th><th>Actions</th></tr></thead><tbody id="customersTableBody"></tbody></table></div></div></section>
+<section id="customers" class="screen"><div class="panel"><div class="head"><h2>Customers</h2><button class="btn primary" onclick="openAddCustomer()">＋ New Customer</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Customer</th><th>Mobile</th><th>Address</th><th>Total Purchase</th><th>Due</th><th>Last Purchase</th><th>Actions</th></tr></thead><tbody id="customersTableBody"></tbody></table></div></div></section>
 
 <section id="ledger" class="screen"><div class="grid"><div class="panel"><div class="head"><h2>Customer Due Ledger</h2><button class="btn primary" onclick="openReceivePayment()">＋ Receive Payment</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Date</th><th>Customer</th><th>Invoice</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead><tbody id="ledgerTableBody"></tbody></table></div></div><div class="panel"><div class="head"><h2>Total Outstanding</h2></div><div class="num danger" id="totalOutstanding">৳0</div><div class="sub" id="outstandingCount">Across 0 customers</div></div></div></section>
 
 <section id="cash" class="screen"><div class="cards"><div class="card"><div class="label">Opening Cash</div><div class="num" id="statOpeningCash">৳0</div></div><div class="card"><div class="label">Cash In</div><div class="num" id="statCashIn">৳0</div></div><div class="card"><div class="label">Cash Out</div><div class="num" id="statCashOut">৳0</div></div><div class="card"><div class="label">Expected Closing</div><div class="num" id="statClosingCash">৳0</div></div></div><div class="panel" style="margin-top:15px"><div class="head"><h2>Today's Cash Flow</h2><button class="btn primary" onclick="openAddExpense()">＋ Add Expense</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Time</th><th>Description</th><th>Type</th><th>Amount</th></tr></thead><tbody id="cashTableBody"></tbody></table></div></div></section>
 
 <section id="purchases" class="screen">
-<div class="panel"><div class="head"><h2>Purchase / Stock In</h2><button class="btn primary" onclick="openNewPurchase()">＋ New Purchase</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Date</th><th>Supplier</th><th>Invoice</th><th>Items</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead><tbody id="purchasesTableBody"></tbody></table></div></div>
+<div class="panel"><div class="head"><h2>Purchase / Stock In</h2><button class="btn primary" onclick="openNewPurchase()">＋ New Purchase</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Date</th><th>Supplier</th><th>Invoice</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th>Actions</th></tr></thead><tbody id="purchasesTableBody"></tbody></table></div></div>
+<div class="panel" style="margin-top:15px"><div class="head"><h2>Suppliers</h2><button class="btn primary" onclick="openAddSupplier()">＋ Add Supplier</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Supplier Name</th><th>Phone</th><th>Address</th><th>Actions</th></tr></thead><tbody id="suppliersTableBody"></tbody></table></div></div>
 <div class="panel" style="margin-top:15px"><div class="head"><h2>Purchase Return History</h2></div><div class="tablewrap"><table class="table"><thead><tr><th>Date</th><th>Invoice</th><th>Supplier</th><th>Product</th><th>Qty</th><th>Amount</th></tr></thead><tbody id="purchaseReturnsTableBody"></tbody></table></div></div>
 </section>
 
@@ -139,25 +177,25 @@
   <div class="field"><label>To</label><input type="date" id="reportTo" onchange="renderReports()"></div>
  </div>
  <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-  <button class="btn soft" onclick="setReportRange('today')">আজ</button>
-  <button class="btn soft" onclick="setReportRange('week')">এই সপ্তাহ</button>
-  <button class="btn soft" onclick="setReportRange('month')">এই মাস</button>
-  <button class="btn soft" onclick="setReportRange('all')">সব সময়</button>
+  <button class="btn soft" onclick="setReportRange('today')">Today</button>
+  <button class="btn soft" onclick="setReportRange('week')">This Week</button>
+  <button class="btn soft" onclick="setReportRange('month')">This Month</button>
+  <button class="btn soft" onclick="setReportRange('all')">All Time</button>
  </div>
 </div>
 <div class="cards" style="margin-top:15px"><div class="card"><div class="label">Total Sales</div><div class="num" id="statMonthlySales">৳0</div></div><div class="card"><div class="label">Estimated Profit</div><div class="num" id="statEstProfit">৳0</div></div><div class="card"><div class="label">Items Sold</div><div class="num" id="statItemsSold">0</div></div><div class="card"><div class="label">Due Outstanding</div><div class="num danger" id="statDueOutstanding">৳0</div></div></div>
 <div class="panel" style="margin-top:15px"><div class="head"><h2>🏆 Best-Selling Products</h2></div><div class="rows" id="bestSellersRows"></div></div>
-<div class="panel" style="margin-top:15px"><div class="head"><h2>Reports</h2><button class="btn soft" onclick="exportSalesCSV()">Export Excel (CSV)</button></div><p class="sub">CSV এক্সপোর্টে সব ইনভয়েসের তালিকা থাকবে (ফিল্টার ছাড়া, সম্পূর্ণ ডেটা) — Excel বা Google Sheets দিয়ে খোলা যাবে।</p></div>
+<div class="panel" style="margin-top:15px"><div class="head"><h2>Reports</h2><button class="btn soft" onclick="exportSalesCSV()">Export Excel (CSV)</button></div><p class="sub">The CSV export will include the full list of all invoices (unfiltered, complete data) — it can be opened with Excel or Google Sheets.</p></div>
 </section>
 
 <section id="settings" class="screen"><div class="grid"><div class="panel"><div class="head"><h2>Store Settings</h2></div><div class="formgrid"><div class="field"><label>Store Name</label><input id="settingStoreName"></div><div class="field"><label>Owner Name</label><input id="settingOwnerName"></div><div class="field"><label>Phone</label><input id="settingPhone"></div><div class="field"><label>Receipt Size</label><select id="settingReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div><div class="field" style="grid-column:1/-1"><label>Address</label><input id="settingAddress"></div><div class="field" style="grid-column:1/-1"><label>Receipt Footer Note</label><input id="settingFooterNote"></div><div class="field"><label>Default VAT %</label><input id="settingVatPercent" type="number" min="0" step="0.01"></div></div>
-<div style="display:flex;gap:9px;margin-top:15px"><button class="btn primary" onclick="saveSettings()">Save Settings</button><button class="btn soft" onclick="resetDemoData()">🗑️ সব ডেটা মুছে ফ্রেশ শুরু করো</button></div></div><div class="panel"><div class="head"><h2>Users & Permissions</h2><button class="btn primary" onclick="openAddUser()">＋ Add User</button></div><div class="rows" id="usersListRows"></div></div></div></section>
+<div style="display:flex;gap:9px;margin-top:15px"><button class="btn primary" onclick="saveSettings()">Save Settings</button><button class="btn soft" id="resetDataBtn" onclick="resetDemoData()">🗑️ Reset All Data &amp; Start Fresh</button></div></div><div class="panel"><div class="head"><h2>Users & Permissions</h2><button class="btn primary" id="addUserBtn" onclick="openAddUser()">＋ Add User</button></div><div class="rows" id="usersListRows"></div></div></div></section>
 
 </main>
 </div>
 
 <div class="modal" id="receiptModal"><div class="receiptWrap"><div class="receipt" id="receipt">
-<img id="receiptLogo" src="" style="display:none;max-width:60px;max-height:60px;margin:0 auto 6px;border-radius:8px"><h3 id="receiptStoreName">SALMAN BANGALI SHOP</h3><p id="receiptAddress">Retail Store</p><p id="receiptPhone">01307935516</p><div class="dash"></div><p style="text-align:left" id="receiptMeta">Invoice: #INV-1026<br>Date: 28-08-2026 22:15<br>Customer: Walk-in Customer</p><div class="dash"></div><div id="receiptItems"></div><div class="dash"></div><div class="rline"><span>Subtotal</span><span id="rsub">৳0</span></div><div class="rline"><span>Discount</span><span id="rdiscount">− ৳0</span></div><div class="rline"><span id="rvatLabel">VAT (0%)</span><span id="rvat">৳0</span></div><div class="rline rgrand"><span>TOTAL</span><span id="rtotal">৳0</span></div><div id="rpaidBreakdown"></div><div class="rline"><span>Due</span><span id="rdue">৳0</span></div><div class="dash"></div><p id="receiptFooterNote">Thank you • আবার আসবেন</p></div><div class="modalBtns"><button class="btn soft" onclick="closeReceipt()">Close</button><button class="btn primary" onclick="window.print()">🖨 Print</button></div></div></div>
+<img id="receiptLogo" src="" style="display:none;max-width:60px;max-height:60px;margin:0 auto 6px;border-radius:8px"><h3 id="receiptStoreName">SALMAN BANGALI SHOP</h3><p id="receiptAddress">Retail Store</p><p id="receiptPhone">01307935516</p><div class="dash"></div><p style="text-align:left" id="receiptMeta">Invoice: #INV-1026<br>Date: 28-08-2026 22:15<br>Customer: Walk-in Customer</p><div class="dash"></div><div id="receiptItems"></div><div class="dash"></div><div class="rline"><span>Subtotal</span><span id="rsub">৳0</span></div><div class="rline"><span>Discount</span><span id="rdiscount">− ৳0</span></div><div class="rline"><span id="rvatLabel">VAT (0%)</span><span id="rvat">৳0</span></div><div class="rline rgrand"><span>TOTAL</span><span id="rtotal">৳0</span></div><div id="rpaidBreakdown"></div><div class="rline"><span>Due</span><span id="rdue">৳0</span></div><div class="dash"></div><p id="receiptFooterNote">Thank you • Visit Again</p></div><div class="modalBtns"><button class="btn soft" onclick="closeReceipt()">Close</button><button class="btn primary" onclick="window.print()">🖨 Print</button></div></div></div>
 
 <div class="modal" id="formModal"><div class="receiptWrap" style="width:380px;max-width:90vw">
  <h2 id="formModalTitle" style="margin:0 0 14px;font-size:17px"></h2>
@@ -165,11 +203,96 @@
  <div class="modalBtns"><button class="btn soft" onclick="closeFormModal()">Cancel</button><button class="btn primary" onclick="submitFormModal()">Save</button></div>
 </div></div>
 
+<div class="modal" id="productFormModal"><div class="receiptWrap" style="width:640px;max-width:95vw;max-height:90vh;overflow-y:auto">
+ <h2 id="productFormTitle" style="margin:0 0 14px;font-size:17px">Add New Product</h2>
+ <div class="formgrid" style="grid-template-columns:1fr">
+  <div class="field">
+   <label>Product Photo</label>
+   <div style="display:flex;align-items:center;gap:12px">
+    <div id="pf_imagePreviewWrap" style="width:64px;height:64px;border-radius:12px;overflow:hidden;background:#f0ece3;display:flex;align-items:center;justify-content:center;flex:none;border:1px solid var(--line)">
+     <img id="pf_imagePreview" style="width:100%;height:100%;object-fit:cover;display:none">
+     <span id="pf_imagePlaceholder" style="font-size:26px">📦</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+     <label for="pf_imageInput" class="btn soft" style="cursor:pointer;text-align:center;margin:0">Upload Photo</label>
+     <input type="file" id="pf_imageInput" accept="image/*" style="display:none" onchange="handleProductImageUpload(event)">
+     <button type="button" class="link danger" id="pf_imageRemoveBtn" style="display:none" onclick="removeProductImage()">Remove Photo</button>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="formgrid">
+  <div class="field"><label>Product Name</label><input id="pf_name" placeholder="Product name"></div>
+  <div class="field"><label>Category</label><div style="display:flex;gap:6px"><select id="pf_category" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="quickAddMeta('categories','pf_category')">＋</button></div></div>
+  <div class="field"><label>Brand</label><div style="display:flex;gap:6px"><select id="pf_brand" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="quickAddMeta('brands','pf_brand')">＋</button></div></div>
+  <div class="field"><label>Unit</label><div style="display:flex;gap:6px"><select id="pf_unit" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="quickAddMeta('units','pf_unit')">＋</button></div></div>
+  <div class="field" style="grid-column:1/-1"><label>Product Type</label><select id="pf_type" onchange="productTypeChanged()" style="padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"><option value="simple">Simple (single price/stock)</option><option value="variable">Variable (has variations, e.g. sizes)</option></select></div>
+  <div class="field"><label>Low Stock Alert Quantity</label><input id="pf_lowStockAlert" type="number" min="0" value="5"><small class="sub" style="margin-top:3px;display:block">Warn when total stock falls to or below this</small></div>
+ </div>
+ <div id="pf_simpleSection">
+  <div class="formgrid">
+   <div class="field"><label>SKU / Barcode</label><input id="pf_sku"></div>
+   <div class="field"><label>Purchase Price</label><input id="pf_purchase" type="number"></div>
+   <div class="field"><label>Sell Price</label><input id="pf_sell" type="number"></div>
+   <div class="field"><label>Opening Stock</label><input id="pf_stock" type="number"></div>
+  </div>
+ </div>
+ <div id="pf_variableSection" style="display:none">
+  <div class="field"><label>Variation values (comma separated, e.g. 100gm,150gm,200gm)</label>
+   <div style="display:flex;gap:6px"><input id="pf_variationValues" placeholder="100gm,150gm,200gm" style="flex:1"><button type="button" class="btn soft" onclick="generateVariationRows()">Generate Rows</button></div>
+  </div>
+  <div class="tablewrap" style="margin-top:10px"><table class="table"><thead><tr><th>Value</th><th>SKU</th><th>Purchase</th><th>Sell</th><th>Stock</th><th></th></tr></thead><tbody id="pf_variationRows"></tbody></table></div>
+ </div>
+ <div class="modalBtns" style="margin-top:16px"><button class="btn soft" onclick="closeProductFormModal()">Cancel</button><button class="btn primary" onclick="saveProductForm()">Save</button></div>
+</div></div>
+
+<div class="modal" id="purchaseFormModal"><div class="receiptWrap" style="width:440px;max-width:92vw;max-height:90vh;overflow-y:auto">
+ <h2 style="margin:0 0 14px;font-size:17px">New Purchase / Stock In</h2>
+ <div class="formgrid">
+  <div class="field" style="grid-column:1/-1"><label>Supplier (optional)</label><div style="display:flex;gap:6px"><select id="pu_supplier" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="quickAddSupplierInline('pu_supplier')">＋</button></div></div>
+  <div class="field" style="grid-column:1/-1"><label>Purchase Invoice No</label><input id="pu_invoice"></div>
+  <div class="field" style="grid-column:1/-1"><label>Product</label><div style="display:flex;gap:6px"><select id="pu_product" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="openAddProductFromPurchase()">＋</button></div></div>
+  <div class="field"><label>Quantity</label><input id="pu_qty" type="number" min="1" value="1"></div>
+  <div class="field"><label>Payment Method</label><select id="pu_paymentMethod" style="padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select></div>
+ </div>
+ <div class="modalBtns" style="margin-top:16px"><button class="btn soft" onclick="closePurchaseFormModal()">Cancel</button><button class="btn primary" onclick="savePurchaseForm()">Save</button></div>
+</div></div>
+
+<div class="modal" id="userFormModal"><div class="receiptWrap" style="width:460px;max-width:92vw;max-height:90vh;overflow-y:auto">
+ <h2 id="userFormTitle" style="margin:0 0 14px;font-size:17px">Add New Staff</h2>
+ <div class="formgrid">
+  <div class="field"><label>Staff Name</label><input id="uf_name" placeholder="Staff name"></div>
+  <div class="field"><label>Email</label><input id="uf_email" placeholder="They will log in with this email"></div>
+  <div class="field"><label>Phone Number</label><input id="uf_phone"></div>
+  <div class="field"><label>Address</label><input id="uf_address"></div>
+  <div class="field" style="grid-column:1/-1"><label>Role</label><select id="uf_role" onchange="applyRoleDefaultsToPermissionChecks()" style="padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff">
+    <option value="Manager">Manager</option>
+    <option value="Cashier">Cashier</option>
+    <option value="Salesman">Salesman</option>
+    <option value="Accountant">Accountant</option>
+    <option value="DeliveryMan">Delivery Man</option>
+  </select><small class="sub" style="margin-top:3px;display:block">Selecting a role fills in typical permissions below — tick or untick anything to customize.</small></div>
+ </div>
+ <div class="field" style="margin-top:6px">
+  <label>What can this staff member see &amp; use?</label>
+  <div id="uf_permissionsBox" style="border:1px solid var(--line);border-radius:9px;padding:2px 10px;margin-top:6px"></div>
+ </div>
+ <div class="modalBtns" style="margin-top:16px"><button class="btn soft" onclick="closeUserFormModal()">Cancel</button><button class="btn primary" onclick="saveUserForm()">Save</button></div>
+</div></div>
+
+<div class="modal" id="metaManageModal"><div class="receiptWrap" style="width:520px;max-width:92vw;max-height:88vh;overflow-y:auto">
+ <h2 style="margin:0 0 14px;font-size:17px">Categories / Brands / Units</h2>
+ <div class="panel" style="padding:14px;margin-bottom:12px"><div class="head"><h2 style="font-size:14px;margin:0">Categories</h2></div><div style="display:flex;gap:6px;margin-bottom:8px"><input id="metaNew_categories" placeholder="New category name" style="flex:1;padding:10px;border:1px solid var(--line);border-radius:9px"><button class="btn soft" onclick="addMetaItem('categories')">Add</button></div><div class="rows" id="meta_categories_rows"></div></div>
+ <div class="panel" style="padding:14px;margin-bottom:12px"><div class="head"><h2 style="font-size:14px;margin:0">Brands</h2></div><div style="display:flex;gap:6px;margin-bottom:8px"><input id="metaNew_brands" placeholder="New brand name" style="flex:1;padding:10px;border:1px solid var(--line);border-radius:9px"><button class="btn soft" onclick="addMetaItem('brands')">Add</button></div><div class="rows" id="meta_brands_rows"></div></div>
+ <div class="panel" style="padding:14px"><div class="head"><h2 style="font-size:14px;margin:0">Units</h2></div><div style="display:flex;gap:6px;margin-bottom:8px"><input id="metaNew_units" placeholder="New unit name" style="flex:1;padding:10px;border:1px solid var(--line);border-radius:9px"><button class="btn soft" onclick="addMetaItem('units')">Add</button></div><div class="rows" id="meta_units_rows"></div></div>
+ <div class="modalBtns" style="margin-top:14px"><button class="btn primary" style="width:100%" onclick="closeManageMeta()">Done</button></div>
+</div></div>
+
 <div class="modal" id="scannerModal"><div class="receiptWrap" style="width:420px;max-width:92vw">
- <div class="head" style="margin-bottom:12px"><h2 style="margin:0;font-size:16px">📷 বারকোড স্ক্যান করুন</h2></div>
+ <div class="head" style="margin-bottom:12px"><h2 style="margin:0;font-size:16px">📷 Scan Barcode</h2></div>
  <div id="scannerViewport" class="scannerViewport"><div class="scanFrame"></div></div>
- <p class="sub" style="text-align:center;margin:10px 0 0">বারকোডটি ক্যামেরার সামনে স্থির রাখুন</p>
- <div class="modalBtns"><button class="btn soft" onclick="closeCameraScanner()">বন্ধ করুন</button></div>
+ <p class="sub" style="text-align:center;margin:10px 0 0">Hold the barcode steady in front of the camera</p>
+ <div class="modalBtns"><button class="btn soft" onclick="closeCameraScanner()">Close</button></div>
 </div></div>
 
 <div id="barcodePrintArea"></div>

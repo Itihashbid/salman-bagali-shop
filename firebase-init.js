@@ -72,8 +72,8 @@ window.Firebase = {
     await signOut(secondaryAuth); // secondary session সাথে সাথে সাইন-আউট, primary (Admin) session অক্ষত থাকবে
     return newUid;
   },
-  async createInvite(email, ownerUid, role, name){
-    await setDoc(doc(db, "staffInvites", normEmail(email)), { ownerUid, role, name, createdAt: Date.now() });
+  async createInvite(email, ownerUid, role, name, phone, address, permissions){
+    await setDoc(doc(db, "staffInvites", normEmail(email)), { ownerUid, role, name, phone: phone || '', address: address || '', permissions: permissions || [], createdAt: Date.now() });
   },
   async getInvite(email){
     const snap = await getDoc(doc(db, "staffInvites", normEmail(email)));
@@ -95,8 +95,11 @@ window.Firebase = {
     const snap = await getDoc(doc(db, "staffLinks", uid));
     return snap.exists() ? snap.data() : null;
   },
-  async linkStaff(uid, ownerUid, role, name, email){
-    await setDoc(doc(db, "staffLinks", uid), { ownerUid, role, name: name || email, email, linkedAt: Date.now() });
+  async linkStaff(uid, ownerUid, role, name, email, phone, address, permissions){
+    await setDoc(doc(db, "staffLinks", uid), { ownerUid, role, name: name || email, email, phone: phone || '', address: address || '', permissions: permissions || [], linkedAt: Date.now() });
+  },
+  async updateStaffPermissions(uid, role, name, phone, address, permissions){
+    await setDoc(doc(db, "staffLinks", uid), { role, name, phone: phone || '', address: address || '', permissions: permissions || [] }, { merge: true });
   },
   async unlinkStaff(uid){
     try{ await deleteDoc(doc(db, "staffLinks", uid)); }catch(e){}
