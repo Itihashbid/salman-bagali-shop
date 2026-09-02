@@ -30,3 +30,64 @@ main{margin-left:246px;width:calc(100% - 246px);padding:26px 30px 60px}.top{disp
 .mobile{display:none}
 @media(max-width:950px){aside{display:none}main{margin:0;width:100%;padding:17px 13px 80px}.cards{grid-template-columns:repeat(2,1fr)}.grid,.pos{grid-template-columns:1fr}.products{grid-template-columns:repeat(2,1fr)}.cart{position:static}.mobile{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);z-index:10;justify-content:space-around;padding:8px}.mobile button{background:none;border:0;font-size:10px;color:#777}.mobile .active{color:var(--green);font-weight:700}.top h1{font-size:21px}}
 .link.danger{color:var(--red)}
+/* ===== Premium Toggle Switch for Permissions ===== */
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+.permission-card {
+  background: #f8f6f2;
+  border-radius: 14px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #e7e1d6;
+  transition: all 0.15s;
+  cursor: pointer;
+  user-select: none;
+}
+.permission-card:hover {
+  border-color: var(--green);
+  background: #edf3ef;
+}
+.permission-card .label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.permission-card .label .icon {
+  font-size: 18px;
+}
+.toggle-switch {
+  width: 44px;
+  height: 24px;
+  background: #ccc;
+  border-radius: 12px;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+.toggle-switch.active {
+  background: var(--green);
+}
+.toggle-switch .thumb {
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.toggle-switch.active .thumb {
+  transform: translateX(20px);
+}

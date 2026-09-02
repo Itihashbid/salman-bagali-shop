@@ -273,7 +273,7 @@ function show(id, el){
       if(b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${id}'`)) b.classList.add('active');
     });
   }
-  const titles = {dashboard:'Good Evening 👋', pos:'New Sale · POS Billing', products:'Products & Inventory', barcodePrint:'Barcode Print', customers:'Customers', ledger:'Due / Customer Ledger', cash:'Daily Cash Flow', purchases:'Purchases / Stock In', returns:'Sales Return / Exchange', reports:'Reports', settings:'Settings'};
+  const titles = {dashboard:'Dashboard', pos:'New Sale · POS Billing', products:'Products & Inventory', barcodePrint:'Barcode Print', customers:'Customers', ledger:'Due / Customer Ledger', cash:'Daily Cash Flow', purchases:'Purchases / Stock In', returns:'Sales Return / Exchange', reports:'Reports', settings:'Settings'};
   document.getElementById('pageTitle').textContent = titles[id] || id;
   if(id==='dashboard') renderDashboard();
   if(id==='pos') resetPOSExtras();
@@ -1431,34 +1431,74 @@ function saveProfileSettings(){
 }
 let _staffListCache = [];
 let _editingStaffUid = null;
-function permissionCheckboxesHTML(checkedKeys){
+const PERMISSION_ICONS = {
+  dashboard:'⌂', pos:'🛒', products:'▣', barcodePrint:'🏷️',
+  customers:'♙', ledger:'৳', cash:'◈', purchases:'＋',
+  returns:'↩', reports:'⌁', settings:'⚙'
+};
+function permissionCardsHTML(checkedKeys){
   checkedKeys = checkedKeys || [];
-  return PERMISSION_SCREENS.map(s=>`<label style="display:flex;align-items:center;gap:7px;padding:6px 4px;font-size:13px;border-bottom:1px solid var(--line)"><input type="checkbox" class="uf_perm" value="${s.key}" ${checkedKeys.includes(s.key)?'checked':''}> ${s.label}</label>`).join('');
+  return PERMISSION_SCREENS.map(s => {
+    const checked = checkedKeys.includes(s.key);
+    return `
+      <div class="permission-card" data-key="${s.key}" onclick="togglePermissionCard(this)">
+        <span class="label"><span class="icon">${PERMISSION_ICONS[s.key] || '📌'}</span> ${s.label}</span>
+        <div class="toggle-switch ${checked?'active':''}">
+          <div class="thumb"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+function togglePermissionCard(card){
+  const toggle = card.querySelector('.toggle-switch');
+  toggle.classList.toggle('active');
+}
+function getSelectedPermissions(){
+  const cards = document.querySelectorAll('#uf_permissionsBox .permission-card');
+  const perms = [];
+  cards.forEach(card => {
+    if(card.querySelector('.toggle-switch.active')) {
+      perms.push(card.dataset.key);
+    }
+  });
+  return perms;
 }
 function applyRoleDefaultsToPermissionChecks(){
   const role = document.getElementById('uf_role').value;
   const defaults = ROLE_DEFAULT_PERMISSIONS[role] || [];
-  document.querySelectorAll('.uf_perm').forEach(cb=>{ cb.checked = defaults.includes(cb.value); });
+  const cards = document.querySelectorAll('#uf_permissionsBox .permission-card');
+  cards.forEach(card => {
+    const toggle = card.querySelector('.toggle-switch');
+    if(defaults.includes(card.dataset.key)) toggle.classList.add('active');
+    else toggle.classList.remove('active');
+  });
 }
 async function renderUsersList(){
   const box = document.getElementById('usersListRows');
   if(!box || !currentShopId) return;
-  const [staff, invites] = await Promise.all([
-    window.Firebase.listStaffForOwner(currentShopId),
-    window.Firebase.listInvitesForOwner(currentShopId)
-  ]);
-  _staffListCache = staff;
-  let rows = '';
-  staff.forEach((s,i)=>{
-    const phoneBit = s.phone ? ` · ${s.phone}` : '';
-    const permCount = Array.isArray(s.permissions) && s.permissions.length ? `${s.permissions.length} permissions` : 'Default role permissions';
-    rows += `<div class="row"><div><b>${s.name || s.email}</b><div class="sub">${s.role} · ${s.email}${phoneBit} · ${permCount}</div></div><div style="white-space:nowrap"><button class="link" onclick="openEditUser(${i})">Edit</button> <button class="link danger" onclick="removeStaffUser('${s.uid}')">Remove</button></div></div>`;
-  });
-  invites.forEach(inv=>{
-    const phoneBit = inv.phone ? ` · ${inv.phone}` : '';
-    rows += `<div class="row"><div><b>${inv.name || inv.email}</b><div class="sub">${inv.role} · ${inv.email}${phoneBit} · <span style="color:var(--gold)">Waiting for login</span></div></div><button class="link danger" onclick="cancelInvite('${inv.email}')">Cancel</button></div>`;
-  });
-  box.innerHTML = rows || '<div class="sub" style="padding:10px 0">No staff added yet.</div>';
+  box.innerHTML = '<div class="sub" style="padding:12px 0">Loading staff list...</div>';
+  try {
+    const [staff, invites] = await Promise.all([
+      window.Firebase.listStaffForOwner(currentShopId),
+      window.Firebase.listInvitesForOwner(currentShopId)
+    ]);
+    _staffListCache = staff;
+    let rows = '';
+    staff.forEach((s,i)=>{
+      const phoneBit = s.phone ? ` · ${s.phone}` : '';
+      const permCount = Array.isArray(s.permissions) && s.permissions.length ? `${s.permissions.length} permissions` : 'Default role permissions';
+      rows += `<div class="row"><div><b>${s.name || s.email}</b><div class="sub">${s.role} · ${s.email}${phoneBit} · ${permCount}</div></div><div style="white-space:nowrap"><button class="link" onclick="openEditUser(${i})">Edit</button> <button class="link danger" onclick="removeStaffUser('${s.uid}')">Remove</button></div></div>`;
+    });
+    invites.forEach(inv=>{
+      const phoneBit = inv.phone ? ` · ${inv.phone}` : '';
+      rows += `<div class="row"><div><b>${inv.name || inv.email}</b><div class="sub">${inv.role} · ${inv.email}${phoneBit} · <span style="color:var(--gold)">Waiting for login</span></div></div><button class="link danger" onclick="cancelInvite('${inv.email}')">Cancel</button></div>`;
+    });
+    box.innerHTML = rows || '<div class="sub" style="padding:10px 0">No staff added yet.</div>';
+  } catch(e) {
+    console.error(e);
+    box.innerHTML = '<div class="sub" style="padding:10px 0">Error loading staff list.</div>';
+  }
 }
 function openAddUser(){
   if(currentRole !== 'Admin'){ showAlertDialog('Only Admin can add new staff.'); return; }
@@ -1470,7 +1510,7 @@ function openAddUser(){
   document.getElementById('uf_phone').value = '';
   document.getElementById('uf_address').value = '';
   document.getElementById('uf_role').value = 'Cashier';
-  document.getElementById('uf_permissionsBox').innerHTML = permissionCheckboxesHTML(ROLE_DEFAULT_PERMISSIONS['Cashier']);
+  document.getElementById('uf_permissionsBox').innerHTML = permissionCardsHTML(ROLE_DEFAULT_PERMISSIONS['Cashier']);
   document.getElementById('userFormModal').classList.add('show');
 }
 function openEditUser(i){
@@ -1484,7 +1524,7 @@ function openEditUser(i){
   document.getElementById('uf_phone').value = s.phone || '';
   document.getElementById('uf_address').value = s.address || '';
   document.getElementById('uf_role').value = s.role || 'Cashier';
-  document.getElementById('uf_permissionsBox').innerHTML = permissionCheckboxesHTML(Array.isArray(s.permissions) && s.permissions.length ? s.permissions : (ROLE_DEFAULT_PERMISSIONS[s.role]||[]));
+  document.getElementById('uf_permissionsBox').innerHTML = permissionCardsHTML(Array.isArray(s.permissions) && s.permissions.length ? s.permissions : (ROLE_DEFAULT_PERMISSIONS[s.role]||[]));
   document.getElementById('userFormModal').classList.add('show');
 }
 function closeUserFormModal(){
@@ -1497,7 +1537,7 @@ async function saveUserForm(){
   const phone = document.getElementById('uf_phone').value.trim();
   const address = document.getElementById('uf_address').value.trim();
   const role = document.getElementById('uf_role').value;
-  const permissions = Array.from(document.querySelectorAll('.uf_perm:checked')).map(cb=>cb.value);
+  const permissions = getSelectedPermissions();
   if(!name){ showAlertDialog('Please enter the name.'); return; }
   if(!email || !email.includes('@')){ showAlertDialog('Please enter a valid email.'); return; }
   if(!permissions.length){ showAlertDialog('Please select at least one permission for this staff member.'); return; }
@@ -1511,7 +1551,7 @@ async function saveUserForm(){
       showAlertDialog(`A password-setup email has been sent to "${email}". Once they set their password via that link and log in, they'll automatically be added to your shop — no Firebase Console needed.`, {icon:'✅', title:'Staff Added'});
     }
     closeUserFormModal();
-    renderUsersList();
+    await renderUsersList();
   }catch(e){
     console.error(e);
     let msg = 'Could not save staff. Please try again.';
