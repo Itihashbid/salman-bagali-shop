@@ -91,3 +91,8 @@ main{margin-left:246px;width:calc(100% - 246px);padding:26px 30px 60px}.top{disp
 .toggle-switch.active .thumb {
   transform: translateX(20px);
 }
+@media(max-width:950px){
+  #admin .tablewrap .table {
+    min-width: 500px;
+  }
+}

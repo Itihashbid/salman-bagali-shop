@@ -124,19 +124,31 @@ window.Firebase = {
     const shops = [];
     snapshot.forEach(doc => {
       const raw = doc.data();
-      shops.push({
-        id: doc.id,
-        data: raw.data || null,         // পুরো POS স্টেট
-        ownerEmail: raw.ownerEmail || null,
-        ownerUid: raw.ownerUid || null,
-        updatedAt: raw.updatedAt || null
-      });
+      // শুধুমাত্র সক্রিয় shop রাখুন: data খালি নয় এবং ownerEmail আছে
+      if (raw.data && Object.keys(raw.data).length > 0 && raw.ownerEmail) {
+        shops.push({
+          id: doc.id,
+          data: raw.data,
+          ownerEmail: raw.ownerEmail,
+          ownerUid: raw.ownerUid,
+          updatedAt: raw.updatedAt
+        });
+      }
     });
     return shops;
   },
   async countInvites(){
     const snapshot = await getDocs(collection(db, "staffInvites"));
     return snapshot.size; // মোট ইনভাইট সংখ্যা
+  },
+  async deleteShop(shopId){
+    try {
+      await deleteDoc(doc(db, "posData", shopId));
+      return true;
+    } catch(e) {
+      console.error("Delete shop failed", e);
+      throw e;
+    }
   }
 };
 

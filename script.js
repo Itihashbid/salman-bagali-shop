@@ -1522,49 +1522,129 @@ async function renderAdminPanel(){
   const tbody = document.getElementById('adminShopsTableBody');
   if(!tbody) return;
 
-  tbody.innerHTML = '<tr><td colspan="6" class="sub">Loading shops...</td></tr>';
+  const searchTerm = (document.getElementById('adminSearch')?.value || '').toLowerCase();
+
+  tbody.innerHTML = '<tr><td colspan="7" class="sub">Loading shops...</td></tr>';
 
   try {
     const shopsRaw = await window.Firebase.listAllShops();
-    const shops = shopsRaw.map(doc => {
-      const stateData = doc.data || {};
-      const productCount = stateData.products ? stateData.products.length : 0;
-      const salesCount = stateData.sales ? stateData.sales.length : 0;
-      const staffCount = stateData.users ? stateData.users.filter(u => u.role !== 'Admin').length : 0;
-      return {
-        id: doc.id,
-        ownerEmail: doc.ownerEmail || 'N/A',
-        products: productCount,
-        sales: salesCount,
-        staff: staffCount,
-        updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toLocaleString() : 'Never'
-      };
+
+    let shops = shopsRaw.filter(s => {
+      const stateData = s.data || {};
+      const shopName = (stateData.settings?.storeName || '').toLowerCase();
+      const email = (s.ownerEmail || '').toLowerCase();
+      return shopName.includes(searchTerm) || email.includes(searchTerm);
+    });
+
+    let totalRevenue = 0;
+    let totalStaff = 0;
+    shops.forEach(s => {
+      const stateData = s.data || {};
+      if (stateData.sales) {
+        stateData.sales.forEach(sale => totalRevenue += (sale.total || 0));
+      }
+      if (stateData.users) {
+        totalStaff += stateData.users.filter(u => u.role !== 'Admin').length;
+      }
     });
 
     const totalShopsEl = document.getElementById('adminTotalShops');
     if(totalShopsEl) totalShopsEl.textContent = shops.length;
-    let totalStaff = 0;
-    shops.forEach(s => totalStaff += s.staff);
     const totalStaffEl = document.getElementById('adminTotalStaff');
     if(totalStaffEl) totalStaffEl.textContent = totalStaff;
+    const totalRevenueEl = document.getElementById('adminTotalRevenue');
+    if(totalRevenueEl) totalRevenueEl.textContent = fmt(totalRevenue);
 
     const totalInvitesEl = document.getElementById('adminTotalInvites');
-    if(totalInvitesEl) totalInvitesEl.textContent = await window.Firebase.countInvites();
+    if(totalInvitesEl) {
+      try {
+        const count = await window.Firebase.countInvites();
+        totalInvitesEl.textContent = count;
+      } catch(e) { totalInvitesEl.textContent = '?'; }
+    }
 
-    tbody.innerHTML = shops.length ? shops.map(s => `
-      <tr>
-        <td><strong>${s.id}</strong></td>
-        <td>${s.ownerEmail}</td>
-        <td>${s.products}</td>
-        <td>${s.sales}</td>
-        <td>${s.staff}</td>
-        <td>${s.updatedAt}</td>
-      </tr>
-    `).join('') : '<tr><td colspan="6" class="sub">No shops found.</td></tr>';
+    if (!shops.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="sub">No shops found.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = shops.map(s => {
+      const stateData = s.data || {};
+      const shopName = stateData.settings?.storeName || s.id.slice(0, 10) + '...';
+      const productCount = stateData.products ? stateData.products.length : 0;
+      const salesCount = stateData.sales ? stateData.sales.length : 0;
+      const staffCount = stateData.users ? stateData.users.filter(u => u.role !== 'Admin').length : 0;
+      const updated = s.updatedAt ? new Date(s.updatedAt).toLocaleString() : 'Never';
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(shopName)}</strong></td>
+          <td>${escapeHtml(s.ownerEmail || 'N/A')}</td>
+          <td>${productCount}</td>
+          <td>${salesCount}</td>
+          <td>${staffCount}</td>
+          <td>${updated}</td>
+          <td>
+            <button class="link danger" onclick="deleteShopByAdmin('${s.id}')" title="Delete this shop permanently">🗑️</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
 
   } catch(e) {
     console.error(e);
-    tbody.innerHTML = '<tr><td colspan="6" class="danger">Error loading data.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="danger">Error loading data.</td></tr>';
+  }
+}
+
+async function deleteShopByAdmin(shopId){
+  if(!currentUid || currentUid !== SUPER_ADMIN_UID) {
+    showAlertDialog('Unauthorized action.');
+    return;
+  }
+  const confirmed = await showConfirmDialog(
+    `Are you sure you want to permanently delete the shop "${shopId}"? This will remove all its products, sales, customers, and settings. This action cannot be undone!`,
+    { danger: true, icon: '⚠️', title: 'Delete Shop', okLabel: 'Yes, Delete Permanently' }
+  );
+  if(!confirmed) return;
+
+  try {
+    await window.Firebase.deleteShop(shopId);
+    showAlertDialog('Shop deleted successfully.', { icon: '✅' });
+    renderAdminPanel();
+  } catch(e) {
+    showAlertDialog('Failed to delete shop. Please try again.');
+    console.error(e);
+  }
+}
+
+async function exportAdminCSV(){
+  if(currentUid !== SUPER_ADMIN_UID) return;
+  try {
+    const shopsRaw = await window.Firebase.listAllShops();
+    let csv = 'Shop Name,Owner Email,Products,Sales,Staff,Last Updated\n';
+    shopsRaw.forEach(s => {
+      const stateData = s.data || {};
+      const shopName = stateData.settings?.storeName || s.id;
+      const productCount = stateData.products ? stateData.products.length : 0;
+      const salesCount = stateData.sales ? stateData.sales.length : 0;
+      const staffCount = stateData.users ? stateData.users.filter(u => u.role !== 'Admin').length : 0;
+      const updated = s.updatedAt ? new Date(s.updatedAt).toLocaleString() : 'Never';
+      csv += `"${shopName}","${s.ownerEmail || 'N/A'}",${productCount},${salesCount},${staffCount},"${updated}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shops_report_${todayStr()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    showAlertDialog('Failed to export CSV.');
+    console.error(e);
   }
 }
 

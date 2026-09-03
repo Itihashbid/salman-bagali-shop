@@ -195,14 +195,30 @@
 <section id="admin" class="screen">
   <div class="panel">
     <div class="head"><h2>👑 Super Admin Dashboard</h2></div>
+
     <div class="cards" style="margin-bottom:15px">
       <div class="card"><div class="label">Total Shops</div><div class="num" id="adminTotalShops">0</div></div>
-      <div class="card"><div class="label">Total Staff (Linked)</div><div class="num" id="adminTotalStaff">0</div></div>
-      <div class="card"><div class="label">Total Invites Pending</div><div class="num" id="adminTotalInvites">0</div></div>
+      <div class="card"><div class="label">Total Staff</div><div class="num" id="adminTotalStaff">0</div></div>
+      <div class="card"><div class="label">Total Invites</div><div class="num" id="adminTotalInvites">0</div></div>
+      <div class="card"><div class="label">🌍 Total Revenue (All Shops)</div><div class="num" id="adminTotalRevenue">৳0</div></div>
     </div>
+
+    <div class="toolbar">
+      <input class="search" id="adminSearch" oninput="renderAdminPanel()" placeholder="🔍 Search by Shop Name or Owner Email...">
+      <button class="btn soft" onclick="exportAdminCSV()">📥 Export CSV</button>
+    </div>
+
     <div class="tablewrap">
       <table class="table">
-        <thead><tr><th>Shop Owner</th><th>Email</th><th>Products</th><th>Sales</th><th>Staff</th><th>Last Updated</th></tr></thead>
+        <thead><tr>
+          <th>Shop Name</th>
+          <th>Owner Email</th>
+          <th>Products</th>
+          <th>Sales</th>
+          <th>Staff</th>
+          <th>Last Updated</th>
+          <th style="width:80px">Action</th>
+        </tr></thead>
         <tbody id="adminShopsTableBody"></tbody>
       </table>
     </div>
