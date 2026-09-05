@@ -2,7 +2,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
-  createUserWithEmailAndPassword, sendPasswordResetEmail
+  createUserWithEmailAndPassword, sendPasswordResetEmail,
+  reauthenticateWithCredential, EmailAuthProvider, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs
@@ -38,6 +39,18 @@ window.Firebase = {
   },
   logout(){
     return signOut(auth);
+  },
+  // ===== পাসওয়ার্ড রিসেট ইমেইল পাঠানো (লগইন পেজের "Forgot Password?") =====
+  forgotPassword(email){
+    return sendPasswordResetEmail(auth, normEmail(email));
+  },
+  // ===== চলতি ইউজারের পাসওয়ার্ড পরিবর্তন (রি-অথেন্টিকেট করে তারপর আপডেট করে) =====
+  async changePassword(currentPassword, newPassword){
+    const user = auth.currentUser;
+    if(!user || !user.email) throw {code:'auth/no-current-user', message:'No logged-in user found.'};
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
   },
   onAuthChange(cb){
     onAuthStateChanged(auth, cb);

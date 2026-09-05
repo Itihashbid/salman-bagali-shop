@@ -14,7 +14,10 @@ function nowTime(){
 }
 function fmt(n){
   n = Math.round(n||0);
-  return '৳' + n.toLocaleString('en-IN');
+  const sym = (state && state.settings && state.settings.currencySymbol) || '৳';
+  const val = n.toLocaleString('en-IN');
+  const placement = (state && state.settings && state.settings.currencyPlacement) || 'before';
+  return placement === 'before' ? sym + val : val + sym;
 }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
@@ -148,13 +151,42 @@ const ROLE_DEFAULT_PERMISSIONS = {
 };
 
 /* ===================== PAYMENT METHODS ===================== */
-const PAYMENT_METHODS = [
+let PAYMENT_METHODS = [
   {key:'cash',  label:'Cash',  icon:'💵', inputId:'payCash'},
   {key:'bkash', label:'bKash', icon:'📱', inputId:'payBkash'},
   {key:'nagad', label:'Nagad', icon:'📲', inputId:'payNagad'},
   {key:'bank',  label:'Bank',  icon:'🏦', inputId:'payBank'},
   {key:'card',  label:'Card',  icon:'💳', inputId:'payCard'},
 ];
+const BUILTIN_PAY_INPUT_IDS = {cash:'payCash', bkash:'payBkash', nagad:'payNagad', bank:'payBank', card:'payCard'};
+function defaultPaymentMethods(){
+  return [
+    {id:uid(), key:'cash',  label:'Cash',  icon:'💵', enabled:true, builtin:true},
+    {id:uid(), key:'bkash', label:'bKash', icon:'📱', enabled:true, builtin:true},
+    {id:uid(), key:'nagad', label:'Nagad', icon:'📲', enabled:true, builtin:true},
+    {id:uid(), key:'bank',  label:'Bank',  icon:'🏦', enabled:true, builtin:true},
+    {id:uid(), key:'card',  label:'Card',  icon:'💳', enabled:true, builtin:true},
+  ];
+}
+function defaultTaxRates(){
+  return [
+    {id:uid(), name:'VAT 0%', rate:0, isDefault:false},
+    {id:uid(), name:'VAT 5%', rate:5, isDefault:false},
+    {id:uid(), name:'VAT 10%', rate:10, isDefault:true},
+    {id:uid(), name:'VAT 15%', rate:15, isDefault:false},
+  ];
+}
+function syncPaymentMethods(){
+  const list = (state.paymentMethods && state.paymentMethods.length) ? state.paymentMethods : [];
+  PAYMENT_METHODS = list.filter(m=>m.enabled!==false).map(m=>({
+    key:m.key, label:m.label, icon:m.icon,
+    inputId: BUILTIN_PAY_INPUT_IDS[m.key] || ('payCustom_' + m.key)
+  }));
+  if(!PAYMENT_METHODS.length){
+    // নিরাপত্তার জন্য — POS-এ কখনোই শূন্য পেমেন্ট ফিল্ড থাকা উচিত নয়
+    PAYMENT_METHODS = [{key:'cash', label:'Cash', icon:'💵', inputId:'payCash'}];
+  }
+}
 
 /* ===================== PRODUCT PHOTO / ICON HELPER ===================== */
 function productIconHTML(p, size){
@@ -192,7 +224,9 @@ function emptyState(){
     purchaseReturns: [],
     sales: [],
     users: [{id:uid(), name:'Admin User', role:'Admin'}],
-    settings: {storeName:'My Shop', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'Thank you • Visit Again'},
+    settings: {storeName:'My Shop', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'Thank you • Visit Again', storeCode:'ST0001', storeEmail:'info@myshop.com', website:'', taxId:'', showSignature:true, invoicePrefix:'INV-', defaultDiscount:0, currencySymbol:'৳', currencyPlacement:'before', termsConditions:'যেকোনো পণ্য ফেরত নেওয়ার সময় অবশ্যই রিসিট দেখাতে হবে।', showChange:true},
+    paymentMethods: defaultPaymentMethods(),
+    taxRates: defaultTaxRates(),
   };
 }
 async function resetDemoData(){
@@ -223,7 +257,7 @@ function show(id, el){
   if(id==='dashboard') renderDashboard();
   if(id==='pos') resetPOSExtras();
   if(id==='barcodePrint') renderBarcodePrintScreen();
-  if(id==='settings') renderUsersList();
+  if(id==='settings'){ renderUsersList(); renderPaymentMethodsList(); renderTaxRatesList(); }
   if(id==='admin') renderAdminPanel();
   window.scrollTo(0,0);
 }
@@ -231,7 +265,7 @@ function resetPOSExtras(){
   const dv = document.getElementById('discountValue');
   const dt = document.getElementById('discountType');
   const vp = document.getElementById('vatPercent');
-  if(dv) dv.value = 0;
+  if(dv) dv.value = state.settings.defaultDiscount || 0;
   if(dt) dt.value = 'amount';
   if(vp) vp.value = state.settings.vatPercent || 0;
   PAYMENT_METHODS.forEach(m=>{
@@ -239,6 +273,148 @@ function resetPOSExtras(){
     if(el) el.value = 0;
   });
   renderCart();
+}
+
+/* ===================== PAYMENT METHODS MANAGEMENT ===================== */
+function renderPaymentMethodsList(){
+  const box = document.getElementById('paymentMethodsList');
+  if(!box) return;
+  const methods = state.paymentMethods || [];
+  box.innerHTML = methods.length ? methods.map(m=>`
+    <div class="row">
+      <div class="rowleft">
+        <span style="font-size:20px">${m.icon}</span>
+        <div><b>${escapeHtml(m.label)}</b><div class="sub">${escapeHtml(m.key)}${m.builtin ? ' • built-in' : ''}</div></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="link" onclick="togglePaymentMethod('${m.id}')">${m.enabled!==false ? '✅' : '⛔'}</button>
+        <button class="link danger" onclick="deletePaymentMethod('${m.id}')">✕</button>
+      </div>
+    </div>
+  `).join('') : '<div class="sub" style="padding:10px 0">No payment methods added.</div>';
+}
+async function openAddPaymentMethod(){
+  const data = await showPromptDialog('Payment method details (format: Label|Icon|Key)', 'Rocket|🚀|rocket', {
+    title: 'Add Payment Method',
+    hint: 'Example: Rocket|🚀|rocket'
+  });
+  if(!data) return;
+  const parts = data.split('|').map(s=>s.trim());
+  if(parts.length !== 3 || !parts[0] || !parts[2]){
+    showAlertDialog('Please use the format: Label|Icon|Key (e.g. Rocket|🚀|rocket)');
+    return;
+  }
+  const [label, icon, keyRaw] = parts;
+  const key = keyRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if(!key){ showAlertDialog('Key must contain letters or numbers.'); return; }
+  ensureMetaLists();
+  if(state.paymentMethods.some(m=>m.key === key)){
+    showAlertDialog('A method with this key already exists.');
+    return;
+  }
+  state.paymentMethods.push({id: uid(), key, label, icon: icon || '💰', enabled: true, builtin:false});
+  save();
+  syncPaymentMethods();
+  renderPaymentMethodsList();
+  renderPaymentFields();
+  resetPOSExtras();
+  showAlertDialog('Payment method added successfully.', {icon:'✅'});
+}
+async function deletePaymentMethod(id){
+  const method = (state.paymentMethods||[]).find(m=>m.id === id);
+  if(!method) return;
+  if(method.builtin){
+    showAlertDialog('Built-in payment methods cannot be deleted — you can disable them instead.');
+    return;
+  }
+  const ok = await showConfirmDialog(`Delete "${method.label}"?`, {danger:true, title:'Delete Payment Method'});
+  if(!ok) return;
+  state.paymentMethods = state.paymentMethods.filter(m=>m.id !== id);
+  save();
+  syncPaymentMethods();
+  renderPaymentMethodsList();
+  renderPaymentFields();
+  resetPOSExtras();
+}
+function togglePaymentMethod(id){
+  const method = (state.paymentMethods||[]).find(m=>m.id === id);
+  if(!method) return;
+  method.enabled = method.enabled===false ? true : false;
+  save();
+  syncPaymentMethods();
+  renderPaymentMethodsList();
+  renderPaymentFields();
+  resetPOSExtras();
+}
+
+/* ===================== TAX RATES MANAGEMENT ===================== */
+function renderTaxRatesList(){
+  const box = document.getElementById('taxRatesList');
+  if(!box) return;
+  const rates = state.taxRates || [];
+  box.innerHTML = rates.length ? rates.map(t=>`
+    <div class="row">
+      <div class="rowleft">
+        <span style="font-size:16px">${t.isDefault ? '⭐' : '⬜'}</span>
+        <div><b>${escapeHtml(t.name)}</b><div class="sub">${t.rate}%</div></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="link" onclick="setDefaultTaxRate('${t.id}')">${t.isDefault ? 'Default' : 'Set Default'}</button>
+        <button class="link danger" onclick="deleteTaxRate('${t.id}')">✕</button>
+      </div>
+    </div>
+  `).join('') : '<div class="sub" style="padding:10px 0">No tax rates added.</div>';
+}
+async function openAddTaxRate(){
+  const name = await showPromptDialog('Tax rate name:', 'VAT 15%', {title:'Add Tax Rate'});
+  if(!name || !name.trim()) return;
+  const rateStr = await showPromptDialog('Tax rate percentage:', '15', {title:'Tax Rate %'});
+  if(rateStr === null) return;
+  const rate = Math.max(0, Math.min(100, parseFloat(rateStr) || 0));
+  ensureMetaLists();
+  if(state.taxRates.some(t=>t.name.toLowerCase() === name.trim().toLowerCase())){
+    showAlertDialog('A tax with this name already exists.');
+    return;
+  }
+  state.taxRates.push({id: uid(), name: name.trim(), rate: rate, isDefault: false});
+  save();
+  renderTaxRatesList();
+  fillTaxSelect(document.getElementById('pf_tax') ? document.getElementById('pf_tax').value : '');
+}
+async function deleteTaxRate(id){
+  const rate = (state.taxRates||[]).find(t=>t.id === id);
+  if(!rate) return;
+  if(rate.isDefault){
+    showAlertDialog('Cannot delete the default tax rate. Set another as default first.');
+    return;
+  }
+  const ok = await showConfirmDialog(`Delete "${rate.name}"?`, {danger:true, title:'Delete Tax Rate'});
+  if(!ok) return;
+  state.taxRates = state.taxRates.filter(t=>t.id !== id);
+  save();
+  renderTaxRatesList();
+  fillTaxSelect(document.getElementById('pf_tax') ? document.getElementById('pf_tax').value : '');
+}
+function setDefaultTaxRate(id){
+  state.taxRates.forEach(t=>t.isDefault = (t.id === id));
+  save();
+  renderTaxRatesList();
+  const defaultTax = state.taxRates.find(t=>t.isDefault);
+  if(defaultTax){
+    const vp = document.getElementById('settingVatPercent');
+    if(vp) vp.value = defaultTax.rate;
+    state.settings.vatPercent = defaultTax.rate;
+    save();
+  }
+  showAlertDialog('Default tax rate updated.', {icon:'✅'});
+}
+function fillTaxSelect(selectedId){
+  const taxSel = document.getElementById('pf_tax');
+  if(!taxSel) return;
+  const rates = state.taxRates || [];
+  taxSel.innerHTML = rates.length ? rates.map(t=>`<option value="${t.id}">${escapeHtml(t.name)} (${t.rate}%)</option>`).join('') : '<option value="">No taxes configured</option>';
+  const def = rates.find(t=>t.isDefault);
+  taxSel.value = selectedId || (def ? def.id : '');
 }
 
 /* ===================== GENERIC MODAL FORM ===================== */
@@ -494,7 +670,7 @@ function openReceipt(){
   const t = computeTotals(); // {subtotal, discountAmt, vatPercent, vatAmt, total}
   const p = getPaymentSplit(t.total); // {amounts:{cash,bkash,nagad,bank,card}, paid, due, overpaid}
   if(p.overpaid>0){ showAlertDialog('The amount paid is more than the bill total. Please fix the payment amounts.', {icon:'৳'}); return; }
-  const invoice = '#' + (state.invoiceCounter++);
+  const invoice = state.settings.invoicePrefix + (state.invoiceCounter++);
 
   // reduce stock
   cart.forEach(item=>{
@@ -534,22 +710,58 @@ function openReceipt(){
 
   document.getElementById('receiptItems').innerHTML = cart.map(x=>`<div class="rline"><span>${x.name} ×${x.qty}</span><span>${fmt(x.price*x.qty)}</span></div>`).join('');
   const metaEl = document.getElementById('receiptMeta');
-  if(metaEl) metaEl.innerHTML = `Invoice: ${invoice}<br>Date: ${todayStr()} ${nowTime()}<br>Customer: ${customer}`;
+  if(metaEl){
+    let metaHtml = `Invoice: ${invoice}<br>Date: ${todayStr()} ${nowTime()}<br>Customer: ${customer}`;
+    if(state.settings.storeCode) metaHtml += `<br>Store: ${state.settings.storeCode}`;
+    if(state.settings.storeEmail) metaHtml += `<br>Email: ${state.settings.storeEmail}`;
+    if(state.settings.website) metaHtml += `<br>Web: ${state.settings.website}`;
+    if(state.settings.taxId) metaHtml += `<br>Tax ID: ${state.settings.taxId}`;
+    metaEl.innerHTML = metaHtml;
+  }
   const rLogo = document.getElementById('receiptLogo');
   if(rLogo){ if(state.settings.logo){ rLogo.src = state.settings.logo; rLogo.style.display='block'; } else { rLogo.style.display='none'; } }
   setText('receiptStoreName', state.settings.storeName || 'My Shop');
   setText('receiptAddress', state.settings.address || '');
   setText('receiptPhone', state.settings.phone || '');
   setText('receiptFooterNote', state.settings.footerNote || 'Thank you • Visit Again');
+  const termsEl = document.getElementById('receiptTerms');
+  if(termsEl){
+    termsEl.textContent = state.settings.termsConditions || '';
+    termsEl.style.display = state.settings.termsConditions ? 'block' : 'none';
+  }
+  const sigEl = document.getElementById('receiptSignature');
+  if(sigEl){
+    if(state.settings.showSignature && state.settings.ownerName){
+      sigEl.textContent = 'Signature: ' + state.settings.ownerName;
+      sigEl.style.display = 'block';
+    } else {
+      sigEl.style.display = 'none';
+    }
+  }
   setText('rsub', fmt(t.subtotal));
   setText('rdiscount', t.discountAmt>0 ? ('− ' + fmt(t.discountAmt)) : fmt(0));
   setText('rvatLabel', `VAT (${t.vatPercent}%)`);
   setText('rvat', fmt(t.vatAmt));
   setText('rtotal', fmt(t.total));
-  const breakdownParts = PAYMENT_METHODS.filter(m=>p.amounts[m.key]>0).map(m=>`<div class="rline"><span>Paid (${m.label})</span><span>${fmt(p.amounts[m.key])}</span></div>`);
+  const wordsEl = document.getElementById('rwords');
+  if(wordsEl){
+    wordsEl.textContent = numberToWords(t.total) + ' Taka Only';
+    wordsEl.style.display = 'block';
+  }
+  const breakdownParts = PAYMENT_METHODS.filter(m=>p.amounts[m.key]>0).map(m=>`<div class="rline"><span>Paid (${m.icon} ${m.label})</span><span>${fmt(p.amounts[m.key])}</span></div>`);
   if(!breakdownParts.length) breakdownParts.push(`<div class="rline"><span>Paid</span><span>${fmt(0)}</span></div>`);
   document.getElementById('rpaidBreakdown').innerHTML = breakdownParts.join('');
   setText('rdue', fmt(p.due));
+  const changeEl = document.getElementById('rchange');
+  if(changeEl){
+    const changeAmt = Math.max(0, p.paid - t.total);
+    if(state.settings.showChange !== false && changeAmt > 0){
+      changeEl.textContent = 'Change: ' + fmt(changeAmt);
+      changeEl.style.display = 'block';
+    } else {
+      changeEl.style.display = 'none';
+    }
+  }
   document.getElementById('receiptModal').classList.add('show');
 
   cart = [];
@@ -571,6 +783,9 @@ function ensureMetaLists(){
   if(!Array.isArray(state.brands)) state.brands = [];
   if(!Array.isArray(state.units)) state.units = [];
   if(!Array.isArray(state.suppliers)) state.suppliers = [];
+  if(!Array.isArray(state.paymentMethods) || !state.paymentMethods.length) state.paymentMethods = defaultPaymentMethods();
+  if(!Array.isArray(state.taxRates) || !state.taxRates.length) state.taxRates = defaultTaxRates();
+  syncPaymentMethods();
 }
 function metaOptions(listName){
   ensureMetaLists();
@@ -788,6 +1003,7 @@ function openAddProduct(){
   fillMetaSelect('pf_category', 'categories', '');
   fillMetaSelect('pf_brand', 'brands', '');
   fillMetaSelect('pf_unit', 'units', '');
+  fillTaxSelect('');
   productTypeChanged();
   document.getElementById('productFormModal').classList.add('show');
 }
@@ -814,6 +1030,7 @@ function openEditProduct(id){
   fillMetaSelect('pf_category', 'categories', p.category || '');
   fillMetaSelect('pf_brand', 'brands', p.brand || '');
   fillMetaSelect('pf_unit', 'units', p.unit || '');
+  fillTaxSelect(p.taxId || '');
   productTypeChanged();
   document.getElementById('productFormModal').classList.add('show');
 }
@@ -835,7 +1052,7 @@ function saveProductForm(){
   const category = document.getElementById('pf_category').value;
   const brand = document.getElementById('pf_brand').value;
   const unit = document.getElementById('pf_unit').value;
-  let payload = {emoji:'📦', image:_pfImageData || '', name, category, brand, unit, productType:type, lowStockAlert: Math.max(0, +document.getElementById('pf_lowStockAlert').value || 0)};
+  let payload = {emoji:'📦', image:_pfImageData || '', name, category, brand, unit, productType:type, lowStockAlert: Math.max(0, +document.getElementById('pf_lowStockAlert').value || 0), taxId: document.getElementById('pf_tax') ? document.getElementById('pf_tax').value : ''};
   if(type==='variable'){
     const variations = readVariationRows();
     if(!variations.length){ showAlertDialog('Add at least one variation row (or use Generate Rows).'); return; }
@@ -1264,11 +1481,71 @@ function exportSalesCSV(){
 /* ===================== SETTINGS ===================== */
 function fillSettingsForm(){
   const s = state.settings;
-  const map = {settingStoreName:'storeName', settingPhone:'phone', settingAddress:'address', settingReceiptSize:'receiptSize', settingVatPercent:'vatPercent', settingOwnerName:'ownerName', settingFooterNote:'footerNote'};
+  const map = {settingStoreName:'storeName', settingPhone:'phone', settingAddress:'address', settingReceiptSize:'receiptSize', settingVatPercent:'vatPercent', settingOwnerName:'ownerName', settingFooterNote:'footerNote', settingStoreCode:'storeCode', settingStoreEmail:'storeEmail', settingWebsite:'website', settingTaxId:'taxId', settingInvoicePrefix:'invoicePrefix', settingDefaultDiscount:'defaultDiscount', settingTermsConditions:'termsConditions'};
   Object.keys(map).forEach(id=>{
     const el = document.getElementById(id);
-    if(el) el.value = s[map[id]] !== undefined ? s[map[id]] : (id==='settingVatPercent' ? 0 : '');
+    if(el) el.value = s[map[id]] !== undefined ? s[map[id]] : (id==='settingVatPercent' || id==='settingDefaultDiscount' ? 0 : '');
   });
+  const symEl = document.getElementById('settingCurrencySymbol');
+  if(symEl) symEl.value = s.currencySymbol || '৳';
+  const placeEl = document.getElementById('settingCurrencyPlacement');
+  if(placeEl) placeEl.value = s.currencyPlacement || 'before';
+  const toggle = document.getElementById('settingSignatureToggle');
+  if(toggle){
+    if(s.showSignature) toggle.classList.add('active');
+    else toggle.classList.remove('active');
+  }
+  const chgToggle = document.getElementById('settingChangeToggle');
+  if(chgToggle) chgToggle.classList.toggle('active', s.showChange !== false);
+}
+function toggleSignatureSetting(){
+  const toggle = document.getElementById('settingSignatureToggle');
+  toggle.classList.toggle('active');
+  state.settings.showSignature = toggle.classList.contains('active');
+  save();
+}
+function toggleChangeSetting(){
+  const toggle = document.getElementById('settingChangeToggle');
+  toggle.classList.toggle('active');
+  state.settings.showChange = toggle.classList.contains('active');
+  save();
+}
+
+/* ===================== CHANGE PASSWORD ===================== */
+function openChangePassword(){
+  document.getElementById('passwordModal').classList.add('show');
+  document.getElementById('cp_current').value = '';
+  document.getElementById('cp_new').value = '';
+  document.getElementById('cp_confirm').value = '';
+  document.getElementById('cp_error').style.display = 'none';
+}
+function closePasswordModal(){
+  document.getElementById('passwordModal').classList.remove('show');
+}
+async function submitPasswordChange(){
+  const current = document.getElementById('cp_current').value;
+  const newPass = document.getElementById('cp_new').value;
+  const confirmVal = document.getElementById('cp_confirm').value;
+  const errorEl = document.getElementById('cp_error');
+  const showErr = (msg)=>{ errorEl.textContent = msg; errorEl.style.display = 'block'; };
+
+  if(!current || !newPass || !confirmVal){ showErr('Please fill in all fields.'); return; }
+  if(newPass.length < 6){ showErr('New password must be at least 6 characters.'); return; }
+  if(newPass !== confirmVal){ showErr('Passwords do not match.'); return; }
+
+  try{
+    await window.Firebase.changePassword(current, newPass);
+    closePasswordModal();
+    showAlertDialog('Password updated successfully!', {icon:'✅'});
+  }catch(e){
+    console.error(e);
+    let msg = 'Failed to update password. ';
+    if(e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') msg += 'Current password is incorrect.';
+    else if(e.code === 'auth/requires-recent-login') msg += 'Please log out, log in again, and retry.';
+    else if(e.code === 'auth/weak-password') msg += 'New password is too weak.';
+    else msg += 'Please try again.';
+    showErr(msg);
+  }
 }
 function getShopInitials(name){
   const words = (name||'').trim().split(/\s+/).filter(Boolean);
@@ -1293,6 +1570,15 @@ function saveSettings(){
   state.settings.vatPercent = +document.getElementById('settingVatPercent').value || 0;
   state.settings.ownerName = document.getElementById('settingOwnerName').value;
   state.settings.footerNote = document.getElementById('settingFooterNote').value;
+  state.settings.storeCode = document.getElementById('settingStoreCode').value;
+  state.settings.storeEmail = document.getElementById('settingStoreEmail').value;
+  state.settings.website = document.getElementById('settingWebsite').value;
+  state.settings.taxId = document.getElementById('settingTaxId').value;
+  state.settings.invoicePrefix = document.getElementById('settingInvoicePrefix').value || 'INV-';
+  state.settings.defaultDiscount = Math.min(100, Math.max(0, +document.getElementById('settingDefaultDiscount').value || 0));
+  state.settings.termsConditions = document.getElementById('settingTermsConditions').value;
+  state.settings.currencySymbol = document.getElementById('settingCurrencySymbol').value;
+  state.settings.currencyPlacement = document.getElementById('settingCurrencyPlacement').value;
   save();
   applyBranding();
   showAlertDialog('Settings saved.', {icon:'✅'});
@@ -1651,6 +1937,7 @@ async function exportAdminCSV(){
 /* ===================== INIT ===================== */
 function renderAll(){
   ensureMetaLists();
+  renderPaymentFields();
   applyBranding();
   renderDashboard();
   renderPOSGrid();
@@ -1666,6 +1953,21 @@ function renderAll(){
   renderReturnsTable();
   renderReports();
   fillSettingsForm();
+  renderPaymentMethodsList();
+  renderTaxRatesList();
+}
+function renderPaymentFields(){
+  const grid = document.getElementById('paymentFieldsGrid');
+  if(grid){
+    grid.innerHTML = PAYMENT_METHODS.map((m,i)=>{
+      const isLastOdd = (PAYMENT_METHODS.length % 2 === 1 && i === PAYMENT_METHODS.length-1);
+      return `<input type="number" id="${m.inputId}" min="0" value="0" oninput="renderCart()" placeholder="${m.icon} ${m.label} ৳"${isLastOdd ? ' style="grid-column:1/-1"' : ''}>`;
+    }).join('');
+  }
+  const qp = document.getElementById('quickPayGrid');
+  if(qp){
+    qp.innerHTML = PAYMENT_METHODS.map(m=>`<button onclick="quickPay('${m.key}')">Full ${m.label}</button>`).join('') + `<button onclick="quickPay('due')">Full Due</button>`;
+  }
 }
 /* ===================== AUTH / FIREBASE BOOTSTRAP ===================== */
 function showApp(){
@@ -1678,6 +1980,10 @@ function showLoginScreen(msg){
   const err = document.getElementById('loginError');
   if(msg){ err.textContent = msg; err.style.display = 'block'; }
   else { err.style.display = 'none'; }
+  const resetMsg = document.getElementById('resetMsg');
+  const resetErr = document.getElementById('resetErr');
+  if(resetMsg) resetMsg.style.display = 'none';
+  if(resetErr) resetErr.style.display = 'none';
 }
 async function doLogin(){
   const email = document.getElementById('loginEmail').value.trim();
@@ -1687,6 +1993,33 @@ async function doLogin(){
     await window.Firebase.login(email, password);
   }catch(e){
     showLoginScreen('Login failed — incorrect email or password.');
+  }
+}
+async function handleForgotPassword(){
+  const msgEl = document.getElementById('resetMsg');
+  const errEl = document.getElementById('resetErr');
+  msgEl.style.display = 'none';
+  errEl.style.display = 'none';
+  const email = document.getElementById('loginEmail').value.trim();
+  if(!email){
+    errEl.textContent = 'আগে ইমেইল ঠিকানাটি লিখুন।';
+    errEl.style.display = 'block';
+    return;
+  }
+  try{
+    await window.Firebase.forgotPassword(email);
+    msgEl.textContent = 'রিসেট লিংক আপনার ইমেইলে পাঠানো হয়েছে। ইনবক্স চেক করুন।';
+    msgEl.style.display = 'block';
+  }catch(e){
+    console.error(e);
+    if(e.code === 'auth/user-not-found'){
+      errEl.textContent = 'এই ইমেইলে কোনো অ্যাকাউন্ট পাওয়া যায়নি।';
+    } else if(e.code === 'auth/invalid-email'){
+      errEl.textContent = 'সঠিক ইমেইল ঠিকানা লিখুন।';
+    } else {
+      errEl.textContent = 'ইমেইল পাঠানো যায়নি। ঠিকানা যাচাই করে আবার চেষ্টা করুন।';
+    }
+    errEl.style.display = 'block';
   }
 }
 function doLogout(){
@@ -2174,3 +2507,18 @@ document.addEventListener('keydown', function(e){
   clearTimeout(scanTimer);
   scanTimer = setTimeout(()=>{ scanBuffer = ''; }, 300);
 });
+/* ===================== NUMBER TO WORDS ===================== */
+function numberToWords(num) {
+  if (num === 0) return 'Zero';
+  const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  const fn = (n) => {
+    if (n < 20) return a[n];
+    if (n < 100) return b[Math.floor(n/10)] + (n%10 ? ' ' + a[n%10] : '');
+    if (n < 1000) return a[Math.floor(n/100)] + ' Hundred' + (n%100 ? ' ' + fn(n%100) : '');
+    if (n < 100000) return fn(Math.floor(n/1000)) + ' Thousand' + (n%1000 ? ' ' + fn(n%1000) : '');
+    if (n < 10000000) return fn(Math.floor(n/100000)) + ' Lakh' + (n%100000 ? ' ' + fn(n%100000) : '');
+    return fn(Math.floor(n/10000000)) + ' Crore' + (n%10000000 ? ' ' + fn(n%10000000) : '');
+  };
+  return fn(Math.round(num));
+}
