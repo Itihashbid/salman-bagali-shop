@@ -398,6 +398,16 @@
    <div class="field"><label>SKU / Barcode</label><input id="pf_sku"></div>
    <div class="field"><label>Purchase Price</label><input id="pf_purchase" type="number"></div>
    <div class="field"><label>Sell Price</label><input id="pf_sell" type="number"></div>
+   <div class="field"><label>Auto Discount</label>
+    <div style="display:flex; gap:8px;">
+     <select id="pf_autoDiscType" style="width:50%;">
+      <option value="none">No Discount</option>
+      <option value="percent">% Percent</option>
+      <option value="amount">৳ Amount</option>
+     </select>
+     <input id="pf_autoDiscValue" type="number" min="0" value="0" style="width:50%;">
+    </div>
+   </div>
    <div class="field"><label>Opening Stock</label><input id="pf_stock" type="number"></div>
   </div>
  </div>

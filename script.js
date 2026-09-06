@@ -266,7 +266,14 @@ function show(id, el){
   const titles = {dashboard:'Dashboard', pos:'New Sale · POS Billing', products:'Products & Inventory', barcodePrint:'Barcode Print', customers:'Customers', ledger:'Due / Customer Ledger', cash:'Daily Cash Flow', purchases:'Purchases / Stock In', returns:'Sales Return / Exchange', reports:'Reports', settings:'Settings'};
   document.getElementById('pageTitle').textContent = titles[id] || id;
   if(id==='dashboard') renderDashboard();
-  if(id==='pos') resetPOSExtras();
+  if(id==='pos') {
+    resetPOSExtras();
+    // POS স্ক্রিনে ঢোকা মাত্রই সার্চ বক্সে ফোকাস চলে যাবে
+    setTimeout(() => {
+      const searchBox = document.getElementById('search');
+      if (searchBox) searchBox.focus();
+    }, 100);
+  }
   if(id==='barcodePrint') renderBarcodePrintScreen();
   if(id==='settings'){ renderUsersList(); renderPaymentMethodsList(); renderTaxRatesList(); }
   if(id==='admin') renderAdminPanel();
@@ -585,7 +592,29 @@ function addToCart(key){
   if(x){
     if(x.qty>=p.stock){ showAlertDialog('Cannot add more than available stock.', {icon:'📦'}); return; }
     x.qty++;
-  } else cart.push({id:key, name:displayName, price:p.sell, qty:1, emoji:p.emoji, image:p.image, disc:0});
+  } else {
+    // মূল প্রোডাক্ট থেকে অটো ডিসকাউন্টের মান নেওয়া হচ্ছে
+    const basePrice = p.sell;
+    let finalPrice = basePrice;
+    if (p.autoDiscountType === 'percent') {
+      finalPrice = basePrice * (1 - (p.autoDiscountValue / 100));
+    } else if (p.autoDiscountType === 'amount') {
+      finalPrice = Math.max(0, basePrice - p.autoDiscountValue);
+    }
+    finalPrice = Math.max(0, Math.round(finalPrice));
+
+    cart.push({
+      id: key,
+      name: displayName,
+      price: finalPrice, // এই দামটাই কার্টে অটো বসবে
+      qty: 1,
+      emoji: p.emoji,
+      image: p.image,
+      disc: 0, // ম্যানুয়াল পার-আইটেম ডিসকাউন্টের জন্য (আলাদা ফিচার)
+      basePrice: basePrice, // আসল দাম রাখা হল যাতে রিসিটে প্রমাণ থাকে
+      discApplied: basePrice - finalPrice
+    });
+  }
   renderCart();
 }
 function computeTotals(){
@@ -621,7 +650,7 @@ function renderCart(){
   if(!cart.length){
     box.innerHTML = '<div class="sub" style="padding:25px 0;text-align:center">Cart is empty<br>Select a product</div>';
   } else {
-    box.innerHTML = cart.map((x,i)=>`<div class="cartline"><div><b>${productIconHTML(x,16)} ${x.name}</b><div class="sub">${fmt(x.price)} × ${x.qty}</div>${x.disc > 0 ? `<div class="sub" style="color:var(--red)">Discount: -${fmt(x.disc)}</div>` : ''}<div class="item-disc-btn" onclick="addDiscountToCart(${i})">${x.disc > 0 ? 'Edit Disc' : '+ Add Disc'}</div></div><div class="qty"><button onclick="changeQty(${i},-1)">−</button><b>${x.qty}</b><button onclick="changeQty(${i},1)">+</button></div><b>${fmt(x.price*x.qty - (x.disc||0))}</b></div>`).join('');
+    box.innerHTML = cart.map((x,i)=>`<div class="cartline"><div><b>${productIconHTML(x,16)} ${x.name}</b><div class="sub">${fmt(x.price)} × ${x.qty}</div>${x.discApplied > 0 ? `<div class="sub" style="color:var(--gold)">Auto Discount: -${fmt(x.discApplied)}</div>` : ''}${x.disc > 0 ? `<div class="sub" style="color:var(--red)">Discount: -${fmt(x.disc)}</div>` : ''}<div class="item-disc-btn" onclick="addDiscountToCart(${i})">${x.disc > 0 ? 'Edit Disc' : '+ Add Disc'}</div></div><div class="qty"><button onclick="changeQty(${i},-1)">−</button><b>${x.qty}</b><button onclick="changeQty(${i},1)">+</button></div><b>${fmt(x.price*x.qty - (x.disc||0))}</b></div>`).join('');
   }
   const t = computeTotals();
   setText('subtotal', fmt(t.subtotal));
@@ -666,13 +695,17 @@ function handleScanEnter(e){
   const box = document.getElementById('search');
   const code = box.value.trim();
   if(!code) return;
+
   const p = getSellableItems().find(x=>(x.sku||'').toLowerCase() === code.toLowerCase());
   if(p){
     addToCart(p.key);
-    box.value = '';
+    box.value = ''; // স্ক্যান করা কোড মুছে ফেলা হচ্ছে
     filterProducts();
+    box.focus(); // আবার ফোকাস ফিরিয়ে আনা হচ্ছে
   } else {
     showAlertDialog('No product found for this barcode/SKU: ' + code, {icon:'🔍'});
+    box.value = '';
+    box.focus();
   }
 }
 function openReceipt(){
@@ -883,7 +916,8 @@ function getSellableItems(){
           key: p.id+'::'+v.id, refId:p.id, variationId:v.id,
           name: p.name, variationValue:v.value, emoji:p.emoji, image:p.image,
           sku:v.sku||'', purchase:+v.purchase||0, sell:+v.sell||0, stock:+v.stock||0,
-          category:p.category||'', brand:p.brand||'', unit:p.unit||''
+          category:p.category||'', brand:p.brand||'', unit:p.unit||'',
+          autoDiscountType: p.autoDiscountType || 'none', autoDiscountValue: +p.autoDiscountValue || 0
         });
       });
     } else {
@@ -891,7 +925,8 @@ function getSellableItems(){
         key: p.id, refId:p.id, variationId:null,
         name: p.name, variationValue:'', emoji:p.emoji, image:p.image,
         sku:p.sku||'', purchase:+p.purchase||0, sell:+p.sell||0, stock:+p.stock||0,
-        category:p.category||'', brand:p.brand||'', unit:p.unit||''
+        category:p.category||'', brand:p.brand||'', unit:p.unit||'',
+        autoDiscountType: p.autoDiscountType || 'none', autoDiscountValue: +p.autoDiscountValue || 0
       });
     }
   });
@@ -1028,6 +1063,8 @@ function openAddProduct(){
   document.getElementById('pf_sell').value = 0;
   document.getElementById('pf_stock').value = 0;
   document.getElementById('pf_lowStockAlert').value = 5;
+  if(document.getElementById('pf_autoDiscType')) document.getElementById('pf_autoDiscType').value = 'none';
+  if(document.getElementById('pf_autoDiscValue')) document.getElementById('pf_autoDiscValue').value = 0;
   document.getElementById('pf_variationValues').value = '';
   document.getElementById('pf_variationRows').innerHTML = '';
   document.getElementById('pf_type').value = 'simple';
@@ -1052,6 +1089,8 @@ function openEditProduct(id){
   document.getElementById('pf_sell').value = p.sell || 0;
   document.getElementById('pf_stock').value = p.stock || 0;
   document.getElementById('pf_lowStockAlert').value = (p.lowStockAlert!==undefined && p.lowStockAlert!==null) ? p.lowStockAlert : 5;
+  if(document.getElementById('pf_autoDiscType')) document.getElementById('pf_autoDiscType').value = p.autoDiscountType || 'none';
+  if(document.getElementById('pf_autoDiscValue')) document.getElementById('pf_autoDiscValue').value = p.autoDiscountValue || 0;
   document.getElementById('pf_variationValues').value = '';
   document.getElementById('pf_variationRows').innerHTML = '';
   if(p.productType==='variable' && Array.isArray(p.variations)){
@@ -1083,7 +1122,11 @@ function saveProductForm(){
   const category = document.getElementById('pf_category').value;
   const brand = document.getElementById('pf_brand').value;
   const unit = document.getElementById('pf_unit').value;
-  let payload = {emoji:'📦', image:_pfImageData || '', name, category, brand, unit, productType:type, lowStockAlert: Math.max(0, +document.getElementById('pf_lowStockAlert').value || 0), taxId: document.getElementById('pf_tax') ? document.getElementById('pf_tax').value : ''};
+  let payload = {emoji:'📦', image:_pfImageData || '', name, category, brand, unit, productType:type, lowStockAlert: Math.max(0, +document.getElementById('pf_lowStockAlert').value || 0), taxId: document.getElementById('pf_tax') ? document.getElementById('pf_tax').value : '',
+    // অটো ডিসকাউন্ট
+    autoDiscountType: document.getElementById('pf_autoDiscType') ? document.getElementById('pf_autoDiscType').value : 'none',
+    autoDiscountValue: document.getElementById('pf_autoDiscValue') ? parseFloat(document.getElementById('pf_autoDiscValue').value) || 0 : 0
+  };
   if(type==='variable'){
     const variations = readVariationRows();
     if(!variations.length){ showAlertDialog('Add at least one variation row (or use Generate Rows).'); return; }
@@ -2634,21 +2677,35 @@ function closeCameraScanner(){
 let scanBuffer = '';
 let scanTimer = null;
 document.addEventListener('keydown', function(e){
-  const tag = (e.target.tagName || '').toLowerCase();
-  if(tag==='input' || tag==='select' || tag==='textarea') return;
+  // শুধুমাত্র POS স্ক্রিনে কাজ করবে
   const posScreen = document.getElementById('pos');
   if(!posScreen || !posScreen.classList.contains('active')) return;
+
+  // ইমেইল, পাসওয়ার্ড বা অন্য লেখার জায়গায় কাজ করবে না
+  const tag = (e.target.tagName || '').toLowerCase();
+  if(tag === 'textarea') return;
+
   if(e.key === 'Enter'){
     clearTimeout(scanTimer);
     if(scanBuffer.length >= 3){
       const code = scanBuffer;
       scanBuffer = '';
+
+      // স্ক্যানার যদি সরাসরি POS স্ক্রিনে (সার্চ বক্সে ফোকাস না রেখে) স্ক্যান করে
       const p = getSellableItems().find(x=>(x.sku||'').toLowerCase() === code.toLowerCase());
-      if(p) addToCart(p.key);
-      else showAlertDialog('Barcode not matched: ' + code, {icon:'🔍'});
+      if(p) {
+        addToCart(p.key);
+        // সার্চ বক্স খালি করাও জরুরি
+        const box = document.getElementById('search');
+        if(box) box.value = '';
+      }
     }
     return;
   }
+
+  // সার্চ বক্স বা ইনপুট ফিল্ডে যদি স্ক্যান করা হয়, তাহলে handleScanEnter ফাংশনই কাজ করবে
+  if(tag === 'input' || tag === 'select') return;
+
   if(e.key.length === 1){ scanBuffer += e.key; }
   clearTimeout(scanTimer);
   scanTimer = setTimeout(()=>{ scanBuffer = ''; }, 300);
