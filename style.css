@@ -4,7 +4,7 @@ aside{width:246px;background:var(--card);border-right:1px solid var(--line);padd
 nav{display:grid;gap:5px}nav button{border:0;background:none;text-align:left;padding:12px 13px;border-radius:11px;color:#68645c;cursor:pointer}nav button.active,nav button:hover{background:#edf3ef;color:var(--green);font-weight:700}
 main{margin-left:246px;width:calc(100% - 246px);padding:26px 30px 60px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:23px}.top h1{font-size:25px;margin:0}.top p{margin:5px 0;color:var(--muted);font-size:12px}.user{display:flex;gap:10px;align-items:center}.avatar{width:39px;height:39px;border-radius:50%;background:var(--green);color:white;display:grid;place-items:center;font-weight:bold}
 .screen{display:none}.screen.active{display:block}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.card,.panel{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.card{padding:18px}.label{font-size:11px;color:var(--muted)}.num{font-size:23px;font-weight:800;margin-top:8px}.up{font-size:10px;color:var(--green);margin-top:7px}
-.grid{display:grid;grid-template-columns:1.4fr .8fr;gap:15px;margin-top:15px}.panel{padding:19px}.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}.head h2{font-size:15px;margin:0}.link{background:none;color:var(--green);border:0;font-size:11px}.rows{display:grid}.row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}.rowleft{display:flex;align-items:center;gap:10px}.ico{width:35px;height:35px;border-radius:10px;background:#f0ece3;display:grid;place-items:center}.sub{font-size:11px;color:var(--muted);margin-top:3px}.danger{color:var(--red);font-weight:700}.pill{padding:5px 8px;border-radius:20px;background:#edf3ef;color:var(--green);font-size:10px}.btn{border:0;border-radius:10px;padding:11px 15px;cursor:pointer}.primary{background:var(--green);color:white}.soft{background:#eee9df;color:var(--ink)}
+.grid{display:grid;grid-template-columns:1.4fr .8fr;gap:15px;margin-top:15px}.panel{padding:19px}.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}.head h2{font-size:15px;margin:0}.link{background:none;color:var(--green);border:0;font-size:11px}.rows{display:grid}.row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}.rowleft{display:flex;align-items:center;gap:10px}.ico{width:35px;height:35px;border-radius:10px;background:#f0ece3;display:grid;place-items:center}.sub{font-size:11px;color:var(--muted);margin-top:3px}.danger{color:var(--red);font-weight:700}.pill{padding:5px 8px;border-radius:20px;background:#edf3ef;color:var(--green);font-size:10px}.pill.red{background:#faeae8;color:var(--red)}.btn{border:0;border-radius:10px;padding:11px 15px;cursor:pointer}.primary{background:var(--green);color:white}.soft{background:#eee9df;color:var(--ink)}
 .table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:12px 9px;border-bottom:1px solid var(--line);font-size:12px}.table th{color:var(--muted);font-weight:600}.toolbar{display:flex;gap:9px;margin-bottom:15px}.search{flex:1;padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:white;outline:none}
 .tablewrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}.tablewrap .table{min-width:640px}
 .scannerViewport{position:relative;width:100%;height:280px;border-radius:14px;overflow:hidden;background:#111}
@@ -96,3 +96,97 @@ main{margin-left:246px;width:calc(100% - 246px);padding:26px 30px 60px}.top{disp
     min-width: 500px;
   }
 }
+/* ===== Step 3: Advanced Charts Styles ===== */
+.chart-bar-container { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.chart-bar-label { width: 120px; font-size: 12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chart-bar-track { flex:1; background: #eee9df; height: 20px; border-radius: 5px; overflow:hidden; }
+.chart-bar-fill { background: var(--green); height: 100%; border-radius: 5px; }
+.pie-chart-container { width: 120px; height: 120px; border-radius: 50%; flex-shrink: 0; }
+.pie-legend { display:flex; flex-direction:column; gap:5px; font-size: 12px; }
+.legend-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; }
+
+/* ===== Step 5: Notification styles ===== */
+#adminNotificationsList .row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* Premium Button Hover Effects (added) */
+.btn { transition: all 0.2s ease; }
+.btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
+
+/* ================= BATCH 2: PREMIUM LOOK & FEATURES (added) ================= */
+
+/* 1. Dark Mode */
+body.dark {
+  --bg: #1a1a1a;
+  --card: #242424;
+  --ink: #eeeeee;
+  --muted: #a3a3a3;
+  --line: #3a3a3a;
+  --green: #3fa58a;
+  --green2: #4ebda0;
+  --gold: #e0c07a;
+  --red: #e05a50;
+}
+body.dark .btn.soft { background: #333; color: #fff; }
+body.dark input, body.dark select, body.dark textarea { background: #1a1a1a; color: #fff; border-color: #444; }
+body.dark .receipt { background: #111; color: #eee; }
+
+/* 2. Premium Toast Notification */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.toast {
+  background: #fff;
+  color: #333;
+  padding: 14px 20px;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  font-weight: 600;
+  font-size: 14px;
+  border-left: 5px solid var(--green);
+  transform: translateX(110%);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+  max-width: 350px;
+}
+.toast.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+.toast.error { border-left-color: var(--red); }
+.toast.warning { border-left-color: var(--gold); }
+.toast.info { border-left-color: #3498db; }
+
+/* 3. Single Item Discount UI */
+.cartline .item-disc-btn {
+  font-size: 10px;
+  color: var(--gold);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ================= BATCH 3: SKELETON LOADING & DUE RECEIPT (added) ================= */
+
+/* Skeleton Loading Animation */
+.skeleton {
+  background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 8px;
+}
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton-row { height: 20px; margin-bottom: 10px; }
+
+/* Due Collection Receipt Styling */
+#dueReceiptContent { width: 100%; font-family: "Courier New", monospace; }

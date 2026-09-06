@@ -144,11 +144,21 @@ window.Firebase = {
           data: raw.data,
           ownerEmail: raw.ownerEmail,
           ownerUid: raw.ownerUid,
-          updatedAt: raw.updatedAt
+          updatedAt: raw.updatedAt,
+          status: raw.status || 'active',
+          // ধাপ ২ এর জন্য নতুন ফিল্ড
+          planType: raw.planType || 'Free',
+          expiryDate: raw.expiryDate || '',
+          paymentStatus: raw.paymentStatus || 'Paid'
         });
       }
     });
+    
     return shops;
+  },
+  // ===== শপ ব্লক/আনব্লক করা (Super Admin) =====
+  async setShopStatus(shopId, status){
+    await setDoc(doc(db, "posData", shopId), { status }, { merge: true });
   },
   async countInvites(){
     const snapshot = await getDocs(collection(db, "staffInvites"));
@@ -162,6 +172,75 @@ window.Firebase = {
       console.error("Delete shop failed", e);
       throw e;
     }
+  },
+
+  // ===== সুপার অ্যাডমিনের জন্য: সব ইনভাইট দেখা =====
+  async getAllInvites(){
+    const snap = await getDocs(collection(db, "staffInvites"));
+    const list = [];
+    snap.forEach(d => list.push({ email: d.id, ...d.data() }));
+    return list;
+  },
+
+  // ===== সুপার অ্যাডমিনের জন্য: অ্যাক্টিভিটি লগ করা =====
+  async logAdminAction(action, shopId, shopName, details){
+    try {
+      const user = auth.currentUser;
+      await setDoc(doc(db, "adminLogs", uid()), {
+        action, // e.g. 'Blocked', 'Unblocked', 'Deleted', 'Reset Password'
+        shopId,
+        shopName,
+        details: details || '',
+        adminEmail: user ? user.email : 'Unknown',
+        timestamp: Date.now()
+      });
+    } catch(e) { console.warn("Log failed", e); }
+  },
+
+  // ===== সুপার অ্যাডমিনের জন্য: অ্যাক্টিভিটি লগ পড়া =====
+  async getAdminLogs(){
+    const snap = await getDocs(collection(db, "adminLogs"));
+    const logs = [];
+    snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
+    return logs.sort((a,b) => b.timestamp - a.timestamp); // নতুন লগ আগে দেখাবে
+  },
+
+  // ===== সুপার অ্যাডমিন নোটিফিকেশন সিস্টেম =====
+  async createAdminNotification(title, message, type){
+    try {
+      await setDoc(doc(db, "adminNotifications", uid()), {
+        title: title,
+        message: message,
+        type: type || 'info', // 'warning', 'danger', 'success'
+        isRead: false,
+        timestamp: Date.now()
+      });
+    } catch(e) { console.warn("Notification create failed", e); }
+  },
+  async listAdminNotifications(){
+    const snap = await getDocs(collection(db, "adminNotifications"));
+    const list = [];
+    snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+    return list.sort((a,b) => b.timestamp - a.timestamp);
+  },
+  async markAdminNotificationRead(id){
+    try {
+      await setDoc(doc(db, "adminNotifications", id), { isRead: true }, { merge: true });
+    } catch(e) { console.warn("Notification read failed", e); }
+  },
+
+  // ===== Regular Admin Activity Log (ক্যাশিয়ার/স্টাফের অ্যাক্টিভিটি লগ) =====
+  async logRegularAction(ownerUid, action, details){
+    try {
+      const user = auth.currentUser;
+      await setDoc(doc(db, "adminLogs", uid()), {
+        ownerUid: ownerUid, // এই দোকানের মালিক কে
+        action: action, // e.g. 'Sale Completed', 'Login', 'Logout'
+        details: details || '',
+        adminEmail: user ? user.email : 'Unknown',
+        timestamp: Date.now()
+      });
+    } catch(e) { console.warn("Regular log failed", e); }
   }
 };
 

@@ -204,8 +204,11 @@ let currentUid = null;
 let currentShopId = null;
 let currentRole = 'Admin';
 let currentPermissions = null; // null = Admin/full access, or an array of allowed screen keys for staff
+let isImpersonating = false;
+let originalShopId = null;
 function save(){
   if(isRemoteUpdate || !currentShopId) return; // avoid re-saving remote data, or saving before login
+  if(isImpersonating) return; // Super Admin viewing a shop cannot alter that shop's data
   if(window.Firebase) window.Firebase.saveState(currentShopId, state);
 }
 function emptyState(){
@@ -227,7 +230,15 @@ function emptyState(){
     settings: {storeName:'My Shop', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'Thank you • Visit Again', storeCode:'ST0001', storeEmail:'info@myshop.com', website:'', taxId:'', showSignature:true, invoicePrefix:'INV-', defaultDiscount:0, currencySymbol:'৳', currencyPlacement:'before', termsConditions:'যেকোনো পণ্য ফেরত নেওয়ার সময় অবশ্যই রিসিট দেখাতে হবে।', showChange:true},
     paymentMethods: defaultPaymentMethods(),
     taxRates: defaultTaxRates(),
+    heldOrders: [],
+    stockAdjustments: [],
   };
+}
+// পুরনো ডেটা (আপডেটের আগের) লোড হলে নতুন ফিল্ডগুলো (heldOrders, stockAdjustments) মিসিং থাকতে পারে — এখানে সেফলি ডিফল্ট বসিয়ে দেওয়া হচ্ছে
+function hydrateStateDefaults(s){
+  if(!s) return;
+  if(!Array.isArray(s.heldOrders)) s.heldOrders = [];
+  if(!Array.isArray(s.stockAdjustments)) s.stockAdjustments = [];
 }
 async function resetDemoData(){
   const ok = await showConfirmDialog('Delete all data and start fresh with an empty shop? This action cannot be undone.', {danger:true, icon:'⚠️', okLabel:'Yes, delete everything', title:'Delete All Data'});
@@ -574,11 +585,11 @@ function addToCart(key){
   if(x){
     if(x.qty>=p.stock){ showAlertDialog('Cannot add more than available stock.', {icon:'📦'}); return; }
     x.qty++;
-  } else cart.push({id:key, name:displayName, price:p.sell, qty:1, emoji:p.emoji, image:p.image});
+  } else cart.push({id:key, name:displayName, price:p.sell, qty:1, emoji:p.emoji, image:p.image, disc:0});
   renderCart();
 }
 function computeTotals(){
-  const subtotal = cart.reduce((a,x)=>a+x.price*x.qty,0);
+  const subtotal = cart.reduce((a,x)=>a+(x.price*x.qty - (x.disc||0)),0);
   const discType = (document.getElementById('discountType')||{}).value || 'amount';
   let discVal = +((document.getElementById('discountValue')||{}).value) || 0;
   if(discVal<0) discVal = 0;
@@ -610,7 +621,7 @@ function renderCart(){
   if(!cart.length){
     box.innerHTML = '<div class="sub" style="padding:25px 0;text-align:center">Cart is empty<br>Select a product</div>';
   } else {
-    box.innerHTML = cart.map((x,i)=>`<div class="cartline"><div><b>${productIconHTML(x,16)} ${x.name}</b><div class="sub">${fmt(x.price)} × ${x.qty}</div></div><div class="qty"><button onclick="changeQty(${i},-1)">−</button><b>${x.qty}</b><button onclick="changeQty(${i},1)">+</button></div><b>${fmt(x.price*x.qty)}</b></div>`).join('');
+    box.innerHTML = cart.map((x,i)=>`<div class="cartline"><div><b>${productIconHTML(x,16)} ${x.name}</b><div class="sub">${fmt(x.price)} × ${x.qty}</div>${x.disc > 0 ? `<div class="sub" style="color:var(--red)">Discount: -${fmt(x.disc)}</div>` : ''}<div class="item-disc-btn" onclick="addDiscountToCart(${i})">${x.disc > 0 ? 'Edit Disc' : '+ Add Disc'}</div></div><div class="qty"><button onclick="changeQty(${i},-1)">−</button><b>${x.qty}</b><button onclick="changeQty(${i},1)">+</button></div><b>${fmt(x.price*x.qty - (x.disc||0))}</b></div>`).join('');
   }
   const t = computeTotals();
   setText('subtotal', fmt(t.subtotal));
@@ -707,6 +718,7 @@ function openReceipt(){
     }
   });
   save();
+  logRegularAction('Sale Completed', `Invoice: ${invoice}, Total: ${fmt(t.total)}`);
 
   document.getElementById('receiptItems').innerHTML = cart.map(x=>`<div class="rline"><span>${x.name} ×${x.qty}</span><span>${fmt(x.price*x.qty)}</span></div>`).join('');
   const metaEl = document.getElementById('receiptMeta');
@@ -763,6 +775,25 @@ function openReceipt(){
     }
   }
   document.getElementById('receiptModal').classList.add('show');
+
+  // ===== Loyalty points: 1 point per ৳100 spent, for registered customers =====
+  ensureCustomerPoints();
+  if(customer !== 'Walk-in Customer'){
+    const custForPoints = state.customers.find(c=>c.name===customer);
+    if(custForPoints) custForPoints.points = (custForPoints.points || 0) + Math.floor(t.total / 100);
+  }
+
+  // ===== Save this sale for the WhatsApp receipt button =====
+  _lastSaleData = {
+    storeName: state.settings.storeName || 'My Shop',
+    invoice, date: todayStr(), time: nowTime(), customer,
+    items: saleRecord.items,
+    subtotal: t.subtotal, discount: t.discountAmt, vat: t.vatAmt,
+    total: t.total, paid: p.paid, due: p.due
+  };
+
+  playSuccessBeep();
+  showToast('✅ Sale Completed & Receipt Generated!');
 
   cart = [];
   renderCart();
@@ -1152,6 +1183,7 @@ function openReceivePayment(){
     state.ledger.push({date: todayStr(), customer: cust.name, invoice:'Payment', debit:0, credit:amt, balance:cust.due});
     state.cash.push({time: nowTime(), desc:'Due Collection · '+cust.name, type:'in', amount:amt});
     save(); renderLedgerTable(); renderCustomersTable(); renderCashTable(); renderDashboard();
+    openDueReceipt(cust.name, amt, cust.due);
   });
 }
 
@@ -1809,8 +1841,10 @@ async function renderAdminPanel(){
   if(!tbody) return;
 
   const searchTerm = (document.getElementById('adminSearch')?.value || '').toLowerCase();
+  const planFilter = (document.getElementById('adminPlanFilter')?.value || '');
+  const paymentFilter = (document.getElementById('adminPaymentFilter')?.value || '');
 
-  tbody.innerHTML = '<tr><td colspan="7" class="sub">Loading shops...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></td></tr>';
 
   try {
     const shopsRaw = await window.Firebase.listAllShops();
@@ -1819,11 +1853,19 @@ async function renderAdminPanel(){
       const stateData = s.data || {};
       const shopName = (stateData.settings?.storeName || '').toLowerCase();
       const email = (s.ownerEmail || '').toLowerCase();
-      return shopName.includes(searchTerm) || email.includes(searchTerm);
+      
+      // নতুন ফিল্টার লজিক
+      const planMatch = planFilter ? s.planType === planFilter : true;
+      const paymentMatch = paymentFilter ? s.paymentStatus === paymentFilter : true;
+
+      return (shopName.includes(searchTerm) || email.includes(searchTerm)) && planMatch && paymentMatch;
     });
+
+    _adminShopsCache = shops;
 
     let totalRevenue = 0;
     let totalStaff = 0;
+    let totalPaidShops = 0;
     shops.forEach(s => {
       const stateData = s.data || {};
       if (stateData.sales) {
@@ -1832,6 +1874,7 @@ async function renderAdminPanel(){
       if (stateData.users) {
         totalStaff += stateData.users.filter(u => u.role !== 'Admin').length;
       }
+      if (s.paymentStatus === 'Paid') totalPaidShops++;
     });
 
     const totalShopsEl = document.getElementById('adminTotalShops');
@@ -1850,7 +1893,7 @@ async function renderAdminPanel(){
     }
 
     if (!shops.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="sub">No shops found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" class="sub">No shops found.</td></tr>';
       return;
     }
 
@@ -1861,25 +1904,113 @@ async function renderAdminPanel(){
       const salesCount = stateData.sales ? stateData.sales.length : 0;
       const staffCount = stateData.users ? stateData.users.filter(u => u.role !== 'Admin').length : 0;
       const updated = s.updatedAt ? new Date(s.updatedAt).toLocaleString() : 'Never';
+      const isBlocked = s.status === 'blocked';
+
+      // Plan Badge তৈরি
+      let planBadge = s.planType === 'Premium' ? '<span class="pill" style="background:#fff3cd;color:#856404">Premium</span>' : '<span class="pill">Free</span>';
+      let paymentBadge = s.paymentStatus === 'Due' ? '<span class="pill red">Due</span>' : '<span class="pill">Paid</span>';
 
       return `
         <tr>
           <td><strong>${escapeHtml(shopName)}</strong></td>
           <td>${escapeHtml(s.ownerEmail || 'N/A')}</td>
+          <td><span class="pill${isBlocked ? ' red' : ''}">${isBlocked ? 'Blocked' : 'Active'}</span></td>
+          <td>${planBadge}</td>
+          <td>${s.expiryDate || 'No Expiry'}</td>
+          <td>${paymentBadge}</td>
           <td>${productCount}</td>
           <td>${salesCount}</td>
           <td>${staffCount}</td>
           <td>${updated}</td>
-          <td>
+          <td style="white-space:nowrap">
+            <button class="link" onclick="viewShopByAdmin('${s.id}')" title="View shop details">👁</button>
+            <button class="link" onclick="toggleBlockShopByAdmin('${s.id}','${s.status}')" title="${isBlocked ? 'Unblock this shop' : 'Block this shop'}">${isBlocked ? '🔓' : '🔒'}</button>
+            <button class="link" onclick="resetPasswordByAdmin('${escapeHtml(s.ownerEmail||'')}')" title="Send password reset email">✉️</button>
             <button class="link danger" onclick="deleteShopByAdmin('${s.id}')" title="Delete this shop permanently">🗑️</button>
           </td>
         </tr>
       `;
     }).join('');
 
+    // Step 3: Calls the chart rendering function with the filtered shops
+    renderAdminCharts(shops);
+    renderAdminInvites(); // নতুন লাইন
+    renderAdminLogs();    // নতুন লাইন
+    renderAdminNotifications(); // ধাপ ৫: নোটিফিকেশন লোড করা
+
   } catch(e) {
     console.error(e);
-    tbody.innerHTML = '<tr><td colspan="7" class="danger">Error loading data.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="danger">Error loading data.</td></tr>';
+  }
+}
+
+let _adminShopsCache = [];
+function viewShopByAdmin(shopId){
+  const s = _adminShopsCache.find(x=>x.id===shopId);
+  if(!s){ showAlertDialog('Shop data not found — please refresh.'); return; }
+  const stateData = s.data || {};
+  const shopName = stateData.settings?.storeName || s.id;
+  const productCount = stateData.products ? stateData.products.length : 0;
+  const salesCount = stateData.sales ? stateData.sales.length : 0;
+  const staffCount = stateData.users ? stateData.users.filter(u=>u.role!=='Admin').length : 0;
+
+  showConfirmDialog(
+    `Shop: ${shopName}\nOwner: ${s.ownerEmail || 'N/A'}\nProducts: ${productCount}\nSales: ${salesCount}\nStaff: ${staffCount}`,
+    {
+      title: 'Shop Details', icon: '🏪',
+      okLabel: '👉 Enter this Shop',
+      cancelLabel: 'Cancel'
+    }
+  ).then(confirmed => {
+    if(confirmed) enterShopByAdmin(shopId);
+  });
+}
+
+async function toggleBlockShopByAdmin(shopId, currentStatus){
+  if(!currentUid || currentUid !== SUPER_ADMIN_UID) {
+    showAlertDialog('Unauthorized action.');
+    return;
+  }
+  const newStatus = currentStatus === 'blocked' ? 'active' : 'blocked';
+  const confirmed = await showConfirmDialog(
+    `আপনি কি নিশ্চিতভাবে এই শপটিকে ${newStatus === 'blocked' ? 'ব্লক' : 'আনব্লক'} করতে চান?`,
+    { danger: newStatus === 'blocked', title: newStatus === 'blocked' ? 'Block Shop' : 'Unblock Shop' }
+  );
+  if(!confirmed) return;
+  try{
+    await window.Firebase.setShopStatus(shopId, newStatus);
+
+    await window.Firebase.createAdminNotification(
+      newStatus === 'blocked' ? '🔒 Shop Blocked' : '🔓 Shop Unblocked',
+      `${shopId} has been ${newStatus === 'blocked' ? 'blocked' : 'unblocked'} by Admin`,
+      newStatus === 'blocked' ? 'danger' : 'success'
+    );
+
+    // লগ করা
+    await window.Firebase.logAdminAction(newStatus === 'blocked' ? 'Blocked' : 'Unblocked', shopId, shopId, '');
+
+    showAlertDialog('Status updated successfully.', {icon:'✅'});
+    renderAdminPanel();
+  }catch(e){
+    console.error(e);
+    showAlertDialog('Failed to update status. Please try again.');
+  }
+}
+
+async function resetPasswordByAdmin(email){
+  if(!email){ showAlertDialog('No email on file for this shop.'); return; }
+  const confirmed = await showConfirmDialog(`এই ইমেইলে (${email}) কি পাসওয়ার্ড রিসেট লিংক পাঠাবেন?`, {title:'Send Reset Email'});
+  if(!confirmed) return;
+  try{
+    await window.Firebase.forgotPassword(email);
+
+    // লগ করা
+    await window.Firebase.logAdminAction('Reset Password', email, email, '');
+
+    showAlertDialog('রিসেট লিংক সফলভাবে পাঠানো হয়েছে!', {icon:'✅'});
+  }catch(e){
+    console.error(e);
+    showAlertDialog('ইমেইল পাঠানো যায়নি: ' + (e.message || 'Please try again.'));
   }
 }
 
@@ -1896,6 +2027,16 @@ async function deleteShopByAdmin(shopId){
 
   try {
     await window.Firebase.deleteShop(shopId);
+
+    await window.Firebase.createAdminNotification(
+      '🗑️ Shop Deleted',
+      `${shopId} has been permanently deleted`,
+      'danger'
+    );
+
+    // লগ করা
+    await window.Firebase.logAdminAction('Deleted Shop', shopId, shopId, 'Permanently deleted');
+
     showAlertDialog('Shop deleted successfully.', { icon: '✅' });
     renderAdminPanel();
   } catch(e) {
@@ -1908,7 +2049,7 @@ async function exportAdminCSV(){
   if(currentUid !== SUPER_ADMIN_UID) return;
   try {
     const shopsRaw = await window.Firebase.listAllShops();
-    let csv = 'Shop Name,Owner Email,Products,Sales,Staff,Last Updated\n';
+    let csv = 'Shop Name,Owner Email,Status,Products,Sales,Staff,Last Updated\n';
     shopsRaw.forEach(s => {
       const stateData = s.data || {};
       const shopName = stateData.settings?.storeName || s.id;
@@ -1916,7 +2057,8 @@ async function exportAdminCSV(){
       const salesCount = stateData.sales ? stateData.sales.length : 0;
       const staffCount = stateData.users ? stateData.users.filter(u => u.role !== 'Admin').length : 0;
       const updated = s.updatedAt ? new Date(s.updatedAt).toLocaleString() : 'Never';
-      csv += `"${shopName}","${s.ownerEmail || 'N/A'}",${productCount},${salesCount},${staffCount},"${updated}"\n`;
+      const status = s.status === 'blocked' ? 'Blocked' : 'Active';
+      csv += `"${shopName}","${s.ownerEmail || 'N/A'}","${status}",${productCount},${salesCount},${staffCount},"${updated}"\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -2023,6 +2165,7 @@ async function handleForgotPassword(){
   }
 }
 function doLogout(){
+  logRegularAction('Logout', 'User logged out');
   if(unsubscribeState){ unsubscribeState(); unsubscribeState = null; }
   currentUid = null;
   currentShopId = null;
@@ -2082,10 +2225,12 @@ async function initAfterAuth(user){
     currentPermissions = null;
   }
   applyPermissions();
+  logRegularAction('Login', 'User logged in successfully');
 
   window.Firebase.loadState(currentShopId).then(async remote=>{
     if(remote){
       state = remote;
+      hydrateStateDefaults(state);
     } else {
       state = emptyState();
       await window.Firebase.saveState(currentShopId, state);
@@ -2095,6 +2240,7 @@ async function initAfterAuth(user){
     unsubscribeState = window.Firebase.watchState(currentShopId, function(remoteState){
       isRemoteUpdate = true;
       state = remoteState;
+      hydrateStateDefaults(state);
       renderAll();
       isRemoteUpdate = false;
     });
@@ -2521,4 +2667,486 @@ function numberToWords(num) {
     return fn(Math.floor(n/10000000)) + ' Crore' + (n%10000000 ? ' ' + fn(n%10000000) : '');
   };
   return fn(Math.round(num));
+}
+/* ===================== STEP 3: ADVANCED CHARTS RENDERING ===================== */
+function renderAdminCharts(shops) {
+    // ১. টপ রেভিনিউ শপের বার-চার্ট তৈরি
+    const topShopsBox = document.getElementById('adminTopShopsChart');
+    
+    const shopRevenue = shops.map(s => {
+        let rev = 0;
+        if(s.data && s.data.sales) {
+            rev = s.data.sales.reduce((sum, sale) => sum + (sale.total || 0), 0);
+        }
+        return { 
+            name: (s.data?.settings?.storeName || 'Unknown'), 
+            revenue: rev 
+        };
+    }).sort((a,b) => b.revenue - a.revenue).slice(0, 5); // টপ ৫ শপ
+
+    const maxRev = shopRevenue.length ? shopRevenue[0].revenue : 1;
+
+    topShopsBox.innerHTML = shopRevenue.length ? shopRevenue.map(s => `
+        <div class="chart-bar-container">
+            <div class="chart-bar-label" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</div>
+            <div class="chart-bar-track">
+                <div class="chart-bar-fill" style="width:${(s.revenue/maxRev)*100}%"></div>
+            </div>
+            <b>${fmt(s.revenue)}</b>
+        </div>
+    `).join('') : '<div class="sub">No sales data available for this filter</div>';
+
+    // ২. Active বনাম Blocked পাই-চার্ট (CSS দিয়ে বানানো)
+    const statusBox = document.getElementById('adminStatusChart');
+    
+    const activeCount = shops.filter(s => s.status !== 'blocked').length;
+    const blockedCount = shops.length - activeCount;
+    const activePct = shops.length ? Math.round((activeCount / shops.length) * 100) : 0;
+    const blockedPct = shops.length ? Math.round((blockedCount / shops.length) * 100) : 0;
+
+    if (shops.length === 0) {
+        statusBox.innerHTML = '<div class="sub">No shops data to display</div>';
+    } else {
+        // CSS conic-gradient দিয়ে পাই চার্ট বানানো হলো (কোনো লাইব্রেরি লাগেনি)
+        const pieStyle = `background: conic-gradient(var(--green) 0% ${activePct}%, var(--red) ${activePct}% 100%)`;
+        
+        statusBox.innerHTML = `
+            <div class="pie-chart-container" style="${pieStyle}"></div>
+            <div class="pie-legend">
+                <div><span class="legend-dot" style="background:var(--green)"></span> Active (${activeCount})</div>
+                <div><span class="legend-dot" style="background:var(--red)"></span> Blocked (${blockedCount})</div>
+            </div>
+        `;
+    }
+
+    renderComparisonChart(shops);
+}
+
+/* ===================== STEP 4: INVITES & ACTIVITY LOGS ===================== */
+
+// ১. ইনভাইটস লিস্ট রেন্ডার করা
+async function renderAdminInvites() {
+  const box = document.getElementById('adminInvitesList');
+  if(!box) return;
+  
+  try {
+    const invites = await window.Firebase.getAllInvites();
+    if (!invites.length) {
+      box.innerHTML = '<div class="sub" style="padding:10px 0">No pending invites</div>';
+      return;
+    }
+    
+    box.innerHTML = invites.map(inv => `
+      <div class="row">
+        <div>
+          <b>${escapeHtml(inv.name || inv.email)}</b>
+          <div class="sub">${escapeHtml(inv.email)} · Role: ${escapeHtml(inv.role || 'N/A')}</div>
+        </div>
+        <button class="link danger" onclick="cancelAdminInvite('${escapeHtml(inv.email)}')">Cancel</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    box.innerHTML = '<div class="sub danger">Failed to load invites.</div>';
+  }
+}
+
+// ২. ইনভাইট ক্যানসেল করার ফাংশন
+async function cancelAdminInvite(email) {
+  if (!currentUid || currentUid !== SUPER_ADMIN_UID) return;
+  const confirmed = await showConfirmDialog(`Are you sure you want to cancel the invite for "${email}"?`, {danger:true, title:'Cancel Invite'});
+  if (!confirmed) return;
+  await window.Firebase.deleteInvite(email);
+  showAlertDialog('Invite cancelled.', {icon:'✅'});
+  renderAdminInvites();
+}
+
+// ৩. অ্যাক্টিভিটি লগ লিস্ট রেন্ডার করা
+async function renderAdminLogs() {
+  const box = document.getElementById('adminActivityLogs');
+  if(!box) return;
+  
+  try {
+    const logs = await window.Firebase.getAdminLogs();
+    if (!logs.length) {
+      box.innerHTML = '<div class="sub" style="padding:10px 0">No admin activity recorded yet.</div>';
+      return;
+    }
+
+    box.innerHTML = logs.slice(0, 30).map(log => {
+      const date = new Date(log.timestamp);
+      const timeStr = date.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+      
+      let actionColor = '';
+      if(log.action.includes('Deleted')) actionColor = 'var(--red)';
+      else if(log.action.includes('Blocked')) actionColor = 'var(--red)';
+      else if(log.action.includes('Reset')) actionColor = 'var(--gold)';
+      else actionColor = 'var(--green)';
+      
+      return `
+        <div class="row">
+          <div>
+            <b style="color:${actionColor}">${escapeHtml(log.action)}</b>
+            <div class="sub">${escapeHtml(log.shopName || log.shopId)} · ${escapeHtml(log.adminEmail || '')}</div>
+            <div class="sub">${timeStr}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    box.innerHTML = '<div class="sub danger">Failed to load logs.</div>';
+  }
+}
+
+/* ===================== STEP 5: IN-APP NOTIFICATIONS ===================== */
+
+async function renderAdminNotifications(){
+  const box = document.getElementById('adminNotificationsList');
+  if(!box) return;
+  
+  try {
+    const notifications = await window.Firebase.listAdminNotifications();
+    
+    if(!notifications.length){
+      box.innerHTML = '<div class="sub" style="padding:10px 0;">No new notifications yet.</div>';
+      return;
+    }
+
+    box.innerHTML = notifications.slice(0, 10).map(n => {
+      const date = new Date(n.timestamp);
+      const timeStr = date.toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+
+      // টাইপ অনুযায়ী রং
+      let bgColor = 'var(--card)';
+      if(n.type === 'danger') bgColor = '#fbeceb';
+      else if(n.type === 'warning') bgColor = '#fff3cd';
+      else if(n.type === 'success') bgColor = '#edf3ef';
+
+      return `
+        <div class="row" style="background:${bgColor}; border-radius:8px; padding:10px; margin-bottom:8px; border:1px solid var(--line);">
+          <div style="flex:1;">
+            <b>${escapeHtml(n.title)}</b>
+            <div class="sub" style="margin-top:2px;">${escapeHtml(n.message)}</div>
+            <div class="sub" style="margin-top:4px;">${timeStr}</div>
+          </div>
+          ${!n.isRead ? `<button class="link" style="flex-shrink:0;" onclick="markAdminNotifRead('${n.id}')">Mark as Read</button>` : ''}
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    box.innerHTML = '<div class="sub danger">Failed to load notifications.</div>';
+  }
+}
+
+async function markAdminNotifRead(id){
+  await window.Firebase.markAdminNotificationRead(id);
+  renderAdminNotifications();
+}
+/* ================= BATCH 1 (added): Order Hold/Resume, Stock Adjustment, JSON Backup/Restore ================= */
+
+// ১. Order Hold / Resume
+function holdCurrentOrder(){
+  if(!cart.length) return showAlertDialog('Cart is empty!');
+  const t = computeTotals();
+  const customer = (document.getElementById('posCustomer')||{}).value || 'Walk-in Customer';
+  const discountValue = (document.getElementById('discountValue')||{}).value;
+  const discountType = (document.getElementById('discountType')||{}).value;
+  const vatPercent = (document.getElementById('vatPercent')||{}).value;
+
+  state.heldOrders.push({
+    id: uid(), cart: JSON.parse(JSON.stringify(cart)), customer,
+    discountValue, discountType, vatPercent, total: t.total, heldAt: Date.now()
+  });
+  save();
+  cart = []; renderCart();
+  showAlertDialog('Order held successfully!', {icon:'📌', title:'Hold Success'});
+}
+function openHeldOrdersModal(){
+  if(!state.heldOrders.length) return showAlertDialog('No held orders.');
+  showPromptDialog('Select order to resume (Type index):\n' + state.heldOrders.map((o,i)=>`${i+1}. ${o.customer} - ${fmt(o.total)}`).join('\n'), '1', {
+    title:'Held Orders',
+    hint: 'Enter the number of the order you want to resume'
+  }).then(val => {
+    if(!val) return;
+    const idx = parseInt(val) - 1;
+    if(idx >= 0 && state.heldOrders[idx]) resumeHeldOrder(idx);
+    else showAlertDialog('Invalid selection.');
+  });
+}
+function resumeHeldOrder(index){
+  const order = state.heldOrders[index];
+  if(!order) return;
+  if(cart.length){
+    showConfirmDialog('Current cart is not empty. Replace it with the held order?', {title:'Resume Held Order'}).then(ok=>{
+      if(ok) doResumeHeldOrder(index);
+    });
+    return;
+  }
+  doResumeHeldOrder(index);
+}
+function doResumeHeldOrder(index){
+  const order = state.heldOrders[index];
+  if(!order) return;
+  cart = order.cart;
+  if(document.getElementById('posCustomer')) document.getElementById('posCustomer').value = order.customer;
+  if(document.getElementById('discountValue')) document.getElementById('discountValue').value = order.discountValue;
+  if(document.getElementById('discountType')) document.getElementById('discountType').value = order.discountType;
+  if(document.getElementById('vatPercent')) document.getElementById('vatPercent').value = order.vatPercent;
+  state.heldOrders.splice(index, 1);
+  save();
+  renderCart(); renderPOSGrid();
+  showAlertDialog('Order resumed!', {icon:'✅'});
+}
+
+// ২. Stock Adjustment (manual +/- stock with a logged reason)
+function openStockAdjustment(){
+  const items = getSellableItems();
+  if(!items.length) return showAlertDialog('No products found.');
+  openFormModal('Adjust Stock', [
+    {id:'product', label:'Product', type:'select', options: items.map(p=>({value:p.key, label: p.name + (p.variationValue? ' ('+p.variationValue+')':'') + ' — Stock: ' + p.stock}))},
+    {id:'qty', label:'Quantity (+ add / - deduct)', type:'number', value:0},
+    {id:'reason', label:'Reason (e.g. Damaged, Lost, Recount)', type:'text', value:'Damaged'}
+  ], (v)=>{
+    const p = findSellable(v.product);
+    const qty = parseInt(v.qty) || 0;
+    if(!p){ showAlertDialog('Product not found.'); return false; }
+    if(!qty){ showAlertDialog('Enter a valid non-zero quantity.'); return false; }
+    adjustStock(v.product, qty);
+    state.stockAdjustments.push({
+      id: uid(), date: todayStr(), time: nowTime(),
+      product: p.name + (p.variationValue? ' ('+p.variationValue+')':''),
+      qty, reason: v.reason || 'Manual Adjustment'
+    });
+    save(); renderProductsTable(); renderPOSGrid();
+    showAlertDialog('Stock adjusted successfully!', {icon:'✅'});
+  });
+}
+
+// ৩. Data Backup (JSON) — full state export/import
+function exportJSONBackup(){
+  const dataStr = JSON.stringify(state, null, 2);
+  const blob = new Blob([dataStr], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pos_backup_${todayStr().replace(/[^0-9A-Za-z_-]/g, '_')}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function importJSONBackup(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const ok = await showConfirmDialog('Replace all current data with this backup? This cannot be undone.', {danger:true, title:'Restore Data'});
+    if(!ok){ event.target.value = ''; return; }
+    try {
+      const imported = JSON.parse(e.target.result);
+      hydrateStateDefaults(imported);
+      state = imported;
+      save(); renderAll();
+      showAlertDialog('Backup restored successfully!', {icon:'✅'});
+    } catch(err) { showAlertDialog('Invalid JSON file!'); }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+/* ================= BATCH 2 (added): Dark Mode, Toast, WhatsApp Receipt, Loyalty Points, Sound ================= */
+
+// ১. Dark Mode Toggle
+function toggleDarkMode() {
+  document.body.classList.toggle('dark');
+  localStorage.setItem('sbpos_theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+}
+// লোড হওয়ার সময় থিম সেট করা
+if(localStorage.getItem('sbpos_theme') === 'dark') document.body.classList.add('dark');
+
+// ২. Premium Toast Notification
+function showToast(message, type = 'success') {
+  let container = document.querySelector('.toast-container');
+  if(!container) {
+    container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  setTimeout(() => toast.classList.add('show'), 10);
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}
+
+// ৩. Single Item Discount
+function addDiscountToCart(index) {
+  if(!cart[index]) return;
+  const currentDisc = cart[index].disc || 0;
+  showPromptDialog(`Enter discount for "${cart[index].name}":`, currentDisc, {
+    type: 'number', min: 0, max: cart[index].price * cart[index].qty
+  }).then(val => {
+    if(val !== null) {
+      cart[index].disc = Math.max(0, parseFloat(val) || 0);
+      renderCart();
+    }
+  });
+}
+
+// ৪. WhatsApp Receipt
+let _lastSaleData = null;
+function sendWhatsAppReceipt() {
+  if(!_lastSaleData) return showToast('No receipt data found!', 'error');
+  const d = _lastSaleData;
+  let text = `🧾 *${d.storeName}*\nInvoice: ${d.invoice}\nDate: ${d.date} ${d.time}\nCustomer: ${d.customer}\n--------------------------------\n`;
+  d.items.forEach(i => {
+    text += `${i.name} x ${i.qty} = ${fmt(i.price*i.qty)}\n`;
+  });
+  text += `--------------------------------\nSubtotal: ${fmt(d.subtotal)}\nDiscount: -${fmt(d.discount)}\nVAT: +${fmt(d.vat)}\n*TOTAL: ${fmt(d.total)}*\nPaid: ${fmt(d.paid)}\nDue: ${fmt(d.due)}\n\nThank you for shopping!`;
+
+  const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  window.open(url, '_blank');
+}
+
+// ৫. Sound Effect (Beep) on successful sale
+function playSuccessBeep() {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 800;
+    gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.3);
+  } catch(e) {}
+}
+
+// ৬. Loyalty Points helper — ensures every customer record has a points field
+function ensureCustomerPoints(){
+  state.customers.forEach(c => { if(c.points === undefined) c.points = 0; });
+}
+
+/* ================= BATCH 3 (added): Due Receipt, Activity Log, Comparison Chart ================= */
+
+// ১. Due Collection Receipt (প্রিন্ট করার ব্যবস্থা)
+function openDueReceipt(customerName, amount, balance) {
+  const receipt = document.getElementById('dueReceiptContent');
+  if(!receipt) return;
+  receipt.innerHTML = `
+    <h3 style="text-align:center;margin:0 0 10px">${escapeHtml(state.settings.storeName || 'My Shop')}</h3>
+    <p style="text-align:center;margin:2px 0">Due Collection Receipt</p>
+    <div class="dash" style="border-top:1px dashed #111;margin:8px 0"></div>
+    <div class="rline"><span>Date</span><span>${todayStr()} ${nowTime()}</span></div>
+    <div class="rline"><span>Customer</span><span>${escapeHtml(customerName)}</span></div>
+    <div class="rline"><span>Amount Received</span><span style="font-weight:bold">${fmt(amount)}</span></div>
+    <div class="rline"><span>Remaining Due</span><span style="color:var(--red)">${fmt(balance)}</span></div>
+    <div class="dash" style="border-top:1px dashed #111;margin:8px 0"></div>
+    <p style="text-align:center;font-size:11px">Thank you</p>
+  `;
+  document.getElementById('dueReceiptModal').classList.add('show');
+}
+function closeDueReceiptModal() {
+  document.getElementById('dueReceiptModal').classList.remove('show');
+}
+
+// ২. Regular Admin Activity Log (সেল, লগইন, লগআউট লগ করা)
+async function logRegularAction(action, details) {
+  if (currentShopId && window.Firebase) {
+    try {
+      await window.Firebase.logRegularAction(currentShopId, action, details);
+    } catch (e) { console.warn("Logging failed", e); }
+  }
+}
+
+// ৩. Comparison Chart (Super Admin - সেরা শপ বনাম সবচেয়ে খারাপ শপ)
+function renderComparisonChart(shops) {
+  const box = document.getElementById('adminTopShopsChart');
+  if(!box || !shops.length) return;
+
+  // টপ রেভিনিউ এবং লোয়েস্ট রেভিনিউ বের করা
+  const revenueList = shops.map(s => {
+    let revenue = 0;
+    if (s.data && s.data.sales) revenue = s.data.sales.reduce((sum, sale) => sum + (sale.total || 0), 0);
+    return { name: s.data?.settings?.storeName || 'Unknown', revenue: revenue };
+  }).sort((a,b) => b.revenue - a.revenue);
+
+  const best = revenueList[0];
+  const worst = revenueList[revenueList.length - 1];
+
+  let html = `
+    <div style="margin-bottom:15px">
+      <b style="color:var(--green)">🏆 Top Performer:</b> ${escapeHtml(best.name)} <span style="font-weight:normal">(${fmt(best.revenue)})</span>
+    </div>
+    <div style="margin-bottom:15px">
+      <b style="color:var(--red)">📉 Lowest Performer:</b> ${escapeHtml(worst.name)} <span style="font-weight:normal">(${fmt(worst.revenue)})</span>
+    </div>
+  `;
+
+  box.innerHTML += html;
+}
+
+/* ================= BATCH 4 (added): Super Admin Direct Login (Impersonation) ================= */
+
+// সুপার অ্যাডমিনের জন্য দোকানে "ঢুকে" দেখা
+async function enterShopByAdmin(shopId) {
+    if (currentUid !== SUPER_ADMIN_UID) return;
+
+    // নিজের শপের লাইভ লিসেনার সাময়িকভাবে বন্ধ রাখা হচ্ছে, যাতে সেটা impersonation চলাকালীন state ওভাররাইট করতে না পারে
+    if(unsubscribeState){ unsubscribeState(); unsubscribeState = null; }
+
+    isImpersonating = true;
+    originalShopId = currentShopId;
+    currentShopId = shopId;
+
+    const remote = await window.Firebase.loadState(shopId);
+    state = remote ? remote : emptyState();
+    hydrateStateDefaults(state);
+
+    renderAll();
+    show('dashboard');
+
+    // UI আপডেট
+    document.getElementById('adminBackBtn').style.display = 'inline-block';
+    const adminNavBtn = document.querySelector('nav button[data-screen="admin"]');
+    if(adminNavBtn) adminNavBtn.style.display = 'none';
+    document.getElementById('pageTitle').textContent = 'Viewing Shop: ' + (state.settings.storeName || 'Unknown');
+    showToast('দোকানে প্রবেশ করেছেন: ' + (state.settings.storeName || 'Unknown'), 'info');
+}
+
+// আবার সুপার অ্যাডমিন প্যানেলে ফিরে আসা
+async function exitImpersonation() {
+    if (!isImpersonating) return;
+
+    isImpersonating = false;
+    currentShopId = originalShopId;
+    originalShopId = null;
+
+    const remote = await window.Firebase.loadState(currentShopId);
+    state = remote ? remote : emptyState();
+    hydrateStateDefaults(state);
+
+    // নিজের শপের লাইভ লিসেনার আবার চালু করা
+    unsubscribeState = window.Firebase.watchState(currentShopId, function(remoteState){
+      isRemoteUpdate = true;
+      state = remoteState;
+      hydrateStateDefaults(state);
+      renderAll();
+      isRemoteUpdate = false;
+    });
+
+    renderAll();
+    show('admin');
+
+    // UI আপডেট
+    document.getElementById('adminBackBtn').style.display = 'none';
+    const adminNavBtn = document.querySelector('nav button[data-screen="admin"]');
+    if(adminNavBtn) adminNavBtn.style.display = '';
+    document.getElementById('pageTitle').textContent = 'Super Admin Dashboard';
+    showToast('সুপার অ্যাডমিন প্যানেলে ফিরে এসেছেন', 'success');
 }
