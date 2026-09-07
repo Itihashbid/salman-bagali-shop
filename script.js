@@ -2,6 +2,12 @@
 
 const STORAGE_KEY = 'sara_pos_state_v1';
 
+let reportCalTarget = 'from';
+let reportCalYear = new Date().getFullYear();
+let reportCalMonth = new Date().getMonth();
+let reportStartDate = '';
+let reportEndDate = '';
+
 function todayStr(){
   const d = new Date();
   return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
@@ -234,6 +240,7 @@ function emptyState(){
     heldOrders: [],
     stockAdjustments: [],
     expenseCategories: ['General', 'Market', 'Rent', 'Bills', 'Transport', 'Tea'],
+    offers: [],
   };
 }
 // পুরনো ডেটা (আপডেটের আগের) লোড হলে নতুন ফিল্ডগুলো (heldOrders, stockAdjustments) মিসিং থাকতে পারে — এখানে সেফলি ডিফল্ট বসিয়ে দেওয়া হচ্ছে
@@ -242,6 +249,7 @@ function hydrateStateDefaults(s){
   if(!Array.isArray(s.heldOrders)) s.heldOrders = [];
   if(!Array.isArray(s.stockAdjustments)) s.stockAdjustments = [];
   if(!Array.isArray(s.expenseCategories) || !s.expenseCategories.length) s.expenseCategories = ['General', 'Market', 'Rent', 'Bills', 'Transport', 'Tea'];
+  if(!Array.isArray(s.offers)) s.offers = [];
 }
 async function resetDemoData(){
   const ok = await showConfirmDialog('Delete all data and start fresh with an empty shop? This action cannot be undone.', {danger:true, icon:'⚠️', okLabel:'Yes, delete everything', title:'Delete All Data'});
@@ -278,7 +286,7 @@ function show(id, el){
     }, 100);
   }
   if(id==='barcodePrint') renderBarcodePrintScreen();
-  if(id==='settings'){ renderUsersList(); renderPaymentMethodsList(); renderTaxRatesList(); }
+  if(id==='settings'){ renderUsersList(); renderPaymentMethodsList(); renderTaxRatesList(); renderOffersList(); }
   if(id==='admin') renderAdminPanel();
   if(id==='expense') renderExpenseLedger();
   window.scrollTo(0,0);
@@ -533,8 +541,7 @@ function renderSalesOverviewChart(){
   const chartEl = document.getElementById('salesOverviewChart');
   if(!chartEl) return;
   const labelsEl = document.getElementById('salesOverviewLabels');
-  const rangeSel = document.getElementById('dashboardChartRange');
-  const days = rangeSel ? (+rangeSel.value || 7) : 7;
+  const days = currentChartRange; // এখন কাস্টম ভ্যালু ব্যবহার হবে
 
   const dayTotals = [];
   for(let i=days-1;i>=0;i--){
@@ -605,6 +612,17 @@ function addToCart(key){
     } else if (p.autoDiscountType === 'amount') {
       finalPrice = Math.max(0, basePrice - p.autoDiscountValue);
     }
+
+    // গ্লোবাল অফার (Settings > Offers & Discounts থেকে, সব পণ্যে প্রযোজ্য)
+    const activeOffer = getActiveOfferForDate();
+    if (activeOffer && activeOffer.type) {
+      if (activeOffer.type === 'percent') {
+        finalPrice = finalPrice * (1 - (activeOffer.value / 100));
+      } else if (activeOffer.type === 'amount') {
+        finalPrice = Math.max(0, finalPrice - activeOffer.value);
+      }
+    }
+
     finalPrice = Math.max(0, Math.round(finalPrice));
 
     cart.push({
@@ -1477,10 +1495,11 @@ async function processReturn(invoice, itemIndex){
 
 /* ===================== REPORTS ===================== */
 function getReportDateRange(){
-  const fromStr = (document.getElementById('reportFrom')||{}).value;
-  const toStr = (document.getElementById('reportTo')||{}).value;
-  const from = fromStr ? new Date(fromStr+'T00:00:00') : null;
-  const to = toStr ? new Date(toStr+'T23:59:59') : null;
+  // আগের ভ্যালু (ইনপুট) থেকে এখন গ্লোবাল ভেরিয়েবল থেকে নেওয়া হচ্ছে
+  const fromStr = reportStartDate;
+  const toStr = reportEndDate;
+  const from = fromStr ? new Date(fromStr + 'T00:00:00') : null;
+  const to = toStr ? new Date(toStr + 'T23:59:59') : null;
   return {from, to};
 }
 function saleInRange(s, from, to){
@@ -1490,23 +1509,48 @@ function saleInRange(s, from, to){
   if(to && d > to) return false;
   return true;
 }
+// স্থানীয় (local) তারিখকে YYYY-MM-DD স্ট্রিং-এ রূপান্তর — toISOString() ব্যবহার করলে UTC+6 (বাংলাদেশ) টাইমজোনে
+// রাত ১২টা থেকে ভোর ৬টার মধ্যে তারিখ একদিন পিছিয়ে যেত, তাই সেটা এড়াতে স্থানীয় ভ্যালু দিয়েই স্ট্রিং বানানো হচ্ছে
+function toLocalISODate(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 function setReportRange(mode){
-  const fromEl = document.getElementById('reportFrom');
-  const toEl = document.getElementById('reportTo');
   const now = new Date();
-  const toInputDate = (d)=> d.toISOString().slice(0,10);
+  const toInputDate = toLocalISODate;
+
+  reportStartDate = '';
+  reportEndDate = '';
+
   if(mode==='today'){
-    fromEl.value = toInputDate(now); toEl.value = toInputDate(now);
+    reportStartDate = toInputDate(now);
+    reportEndDate = toInputDate(now);
   } else if(mode==='week'){
     const day = now.getDay();
     const monday = new Date(now); monday.setDate(now.getDate() - ((day+6)%7));
-    fromEl.value = toInputDate(monday); toEl.value = toInputDate(now);
+    reportStartDate = toInputDate(monday);
+    reportEndDate = toInputDate(now);
   } else if(mode==='month'){
     const first = new Date(now.getFullYear(), now.getMonth(), 1);
-    fromEl.value = toInputDate(first); toEl.value = toInputDate(now);
-  } else {
-    fromEl.value = ''; toEl.value = '';
+    reportStartDate = toInputDate(first);
+    reportEndDate = toInputDate(now);
   }
+
+  // বাটনের টেক্সট আপডেট
+  const fromBtn = document.getElementById('fromDateBtn');
+  const toBtn = document.getElementById('toDateBtn');
+
+  if(reportStartDate) {
+      fromBtn.textContent = '📅 ' + new Date(reportStartDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+  } else {
+      fromBtn.textContent = '📅 Select Date';
+  }
+
+  if(reportEndDate) {
+      toBtn.textContent = '📅 ' + new Date(reportEndDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+  } else {
+      toBtn.textContent = '📅 Select Date';
+  }
+
   renderReports();
 }
 function renderReports(){
@@ -3277,6 +3321,9 @@ function resetExpenseFilter() {
 
 // ===== খরচ যোগ করার মডাল (ক্যাটাগরি ড্রপডাউন + নতুন ক্যাটাগরি যোগ) =====
 function openExpenseModal() {
+    document.getElementById('expenseEditId').value = ''; // Add mode — কোনো এডিট নয়
+    const title = document.getElementById('expenseModalTitle');
+    if (title) title.textContent = 'Add New Expense';
     const select = document.getElementById('expCatSelect');
     select.innerHTML = state.expenseCategories.map(c=>`<option>${escapeHtml(c)}</option>`).join('');
     document.getElementById('expDesc').value = '';
@@ -3285,6 +3332,7 @@ function openExpenseModal() {
 }
 function closeExpenseModal() {
     document.getElementById('expenseModal').classList.remove('show');
+    document.getElementById('expenseEditId').value = '';
 }
 function addNewExpenseCategory() {
     showPromptDialog('Enter new category name:', '', {title:'New Category'}).then(cat => {
@@ -3300,28 +3348,90 @@ function addNewExpenseCategory() {
         }
     });
 }
+// পুরনো কল-সাইট (যেমন Cash Flow পেজের "+ Add Expense" বাটন) এখনো openAddExpense() ব্যবহার করে,
+// তাই সেগুলো ভাঙা এড়াতে এটাকে নতুন মডালের দিকে alias করে দেওয়া হলো
+function openAddExpense(){ openExpenseModal(); }
+
+// ===== Edit ফাংশন (পুরনো ডেটা মডালে বসানো) =====
+function openEditExpense(realIndex) {
+    const item = state.cash[realIndex];
+    if (!item) return;
+
+    document.getElementById('expenseEditId').value = realIndex;
+    const title = document.getElementById('expenseModalTitle');
+    if (title) title.textContent = 'Edit Expense';
+
+    const select = document.getElementById('expCatSelect');
+    select.innerHTML = state.expenseCategories.map(c=>`<option>${escapeHtml(c)}</option>`).join('');
+    select.value = item.category || 'General';
+
+    document.getElementById('expDesc').value = item.desc || '';
+    document.getElementById('expAmount').value = item.amount;
+
+    document.getElementById('expenseModal').classList.add('show');
+}
+
+// ===== Delete ফাংশন =====
+async function deleteExpense(realIndex) {
+    const item = state.cash[realIndex];
+    if (!item) return;
+
+    const ok = await showConfirmDialog(`Are you sure you want to delete this expense (${fmt(item.amount)})?`, {danger:true, title:'Delete Expense'});
+    if (!ok) return;
+
+    state.cash.splice(realIndex, 1);
+    save(); // Firestore-এ সেভ
+    renderExpenseLedger(); renderCashTable(); renderDashboard();
+}
+
+// ===== Save ফাংশন (Edit/Add দুটোই কাজ করবে) =====
 function saveExpense() {
     const category = document.getElementById('expCatSelect').value || 'General';
     const desc = document.getElementById('expDesc').value;
     const amount = parseFloat(document.getElementById('expAmount').value) || 0;
     if (amount <= 0) { showAlertDialog('Please enter a valid amount.'); return; }
 
-    state.cash.push({
-        time: nowTime(),
-        date: todayStr(),
-        category: category,
-        desc: desc,
-        type:'out',
-        amount: amount
-    });
+    const editId = document.getElementById('expenseEditId').value;
+
+    if (editId !== "" && state.cash[parseInt(editId)]) {
+        // Edit Mode
+        const idx = parseInt(editId);
+        state.cash[idx].category = category;
+        state.cash[idx].desc = desc;
+        state.cash[idx].amount = amount;
+    } else {
+        // Add Mode
+        state.cash.push({
+            time: nowTime(),
+            date: todayStr(),
+            category: category,
+            desc: desc,
+            type:'out',
+            amount: amount
+        });
+    }
+
+    document.getElementById('expenseEditId').value = ''; // রিসেট
     save(); renderExpenseLedger(); renderCashTable(); renderDashboard();
     closeExpenseModal();
 }
-// পুরনো কল-সাইট (যেমন Cash Flow পেজের "+ Add Expense" বাটন) এখনো openAddExpense() ব্যবহার করে,
-// তাই সেগুলো ভাঙা এড়াতে এটাকে নতুন মডালের দিকে alias করে দেওয়া হলো
-function openAddExpense(){ openExpenseModal(); }
 
-// ===== তারিখ/মাস অনুযায়ী লিস্ট রেন্ডার করা =====
+// ===== দিনে ক্লিক করলে প্রসারিত/বন্ধ হওয়ার ফাংশন =====
+function toggleExpenseDay(date) {
+    const body = document.getElementById(`day-body-${date}`);
+    if (!body) return;
+    const header = body.previousElementSibling;
+
+    if (body.style.display === 'block') {
+        body.style.display = 'none';
+        header.classList.remove('open');
+    } else {
+        body.style.display = 'block';
+        header.classList.add('open');
+    }
+}
+
+// ===== তারিখ/মাস অনুযায়ী লিস্ট রেন্ডার করা (Expandable View) =====
 function renderExpenseLedger(){
   const box = document.getElementById('expenseLedgerList');
   if(!box) return;
@@ -3350,29 +3460,55 @@ function renderExpenseLedger(){
   sortedDates.forEach(date => {
     const dayData = grouped[date];
     grandTotal += dayData.total;
-    const sortedItems = dayData.items.slice().reverse();
 
-    html += `<div class="panel" style="margin-bottom:10px; border:1px solid var(--line);">
-        <div class="head">
-            <h2>📅 ${escapeHtml(date)}</h2>
-            <b style="color:var(--red)">Total: ${fmt(dayData.total)}</b>
-        </div>
-        <div class="rows">
-            ${sortedItems.map(item => `
-                <div class="row">
-                    <div>
-                        <b>${escapeHtml(item.category || 'General')}</b>
-                        <div class="sub">🕒 ${escapeHtml(item.time || '')} - ${escapeHtml(item.desc || 'No Note')}</div>
-                    </div>
-                    <b class="danger">-${fmt(item.amount)}</b>
+    // প্রতিটি আইটেমের জন্য Edit ও Delete বাটন সহ HTML
+    // object reference দিয়ে state.cash-এ আসল ইনডেক্স খোঁজা হচ্ছে (একই সময়/অ্যামাউন্টের ডুপ্লিকেট এন্ট্রি থাকলেও নির্ভুল থাকবে)
+    const itemsHtml = dayData.items.slice().reverse().map(item => {
+        const realIndex = state.cash.indexOf(item);
+
+        return `
+            <div class="expense-item-row">
+                <div>
+                    <b>${escapeHtml(item.category || 'General')}</b>
+                    <div class="sub">🕒 ${escapeHtml(item.time || '')} - ${escapeHtml(item.desc || 'No Note')}</div>
                 </div>
-            `).join('')}
+                <div class="expense-actions">
+                    <b class="danger">-${fmt(item.amount)}</b>
+                    <button class="link" onclick="openEditExpense(${realIndex})">Edit</button>
+                    <button class="link danger" onclick="deleteExpense(${realIndex})">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    html += `
+        <div class="expense-day-wrapper">
+            <div class="expense-day-header" onclick="toggleExpenseDay('${date}')">
+                <span>📅 ${escapeHtml(date)}</span>
+                <span>
+                    <b style="color:var(--red)">Total: ${fmt(dayData.total)}</b>
+                    <span class="chevron">▶</span>
+                </span>
+            </div>
+            <div class="expense-day-body" id="day-body-${date}">
+                ${itemsHtml}
+            </div>
         </div>
-    </div>`;
+    `;
   });
 
   document.getElementById('expenseTotal').textContent = fmt(grandTotal);
   box.innerHTML = html || '<div class="sub" style="padding:20px; text-align:center">No expenses found for this date.</div>';
+
+  // ক্যালেন্ডারে সিলেক্ট করা দিনটি যদি থাকে, সেটি অটো-ওপেন করা
+  if (selectedExpenseDate) {
+      const selectedDateStr = selectedExpenseDate.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+      const body = document.getElementById(`day-body-${selectedDateStr}`);
+      if (body) {
+          body.style.display = 'block';
+          body.parentElement.querySelector('.expense-day-header').classList.add('open');
+      }
+  }
 }
 
 // ===== "This Month" বাটন — তারিখ ফিল্টার রিসেট করে চলতি মাস দেখাবে =====
@@ -3381,4 +3517,423 @@ function setExpenseMonth(){
   const label = document.getElementById('expenseDateLabel');
   if(label) label.textContent = 'Select Date';
   renderExpenseLedger();
+}
+/* ================= NEW FEATURE: DYNAMIC HEADER DATE + PREMIUM DASHBOARD RANGE DROPDOWN ================= */
+
+// Header-এ বর্তমান তারিখ ও বার দেখানো
+function updateHeaderDate() {
+    const d = new Date();
+    const day = d.toLocaleDateString('en-US', { weekday: 'long' });
+    const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    const header = document.getElementById('currentDateHeader');
+    if (header) header.textContent = 'SB POS SYSTEM · ' + day + ', ' + date;
+}
+window.addEventListener('load', updateHeaderDate);
+setInterval(updateHeaderDate, 60000); // প্রতি ১ মিনিট পর পর আপডেট হবে
+
+// প্রিমিয়াম ড্রপডাউন কন্ট্রোল (ড্যাশবোর্ড চার্ট রেঞ্জ)
+let currentChartRange = 7;
+
+function toggleDashboardRangeDropdown() {
+    const menu = document.getElementById('chartRangeMenu');
+    if (!menu) return;
+    menu.style.display = (menu.style.display === 'none') ? 'block' : 'none';
+}
+
+function setDashboardRange(days) {
+    currentChartRange = days;
+    let label = days + ' days';
+    if (days === 30) label = 'Last 1 Month';
+    else if (days === 365) label = 'Last 1 Year';
+    else if (days === 7) label = 'Last 7 days';
+    else if (days === 14) label = 'Last 14 days';
+    else if (days === 28) label = 'Last 28 days';
+
+    const btn = document.getElementById('chartRangeBtn');
+    if (btn) btn.innerHTML = label + ' ▾';
+    const menu = document.getElementById('chartRangeMenu');
+    if (menu) menu.style.display = 'none';
+    renderDashboard(); // চার্ট রিফ্রেশ করা
+}
+
+function setCustomDashboardRange() {
+    const menu = document.getElementById('chartRangeMenu');
+    if (menu) menu.style.display = 'none';
+    showPromptDialog('Enter number of days (e.g., 45):', '', {title:'Custom Range', type:'number', min:1}).then(customDays=>{
+        if (customDays && !isNaN(customDays) && parseInt(customDays) > 0) {
+            setDashboardRange(parseInt(customDays));
+        } else if (customDays !== null) {
+            showAlertDialog("Please enter a valid number of days.");
+        }
+    });
+}
+
+// ড্রপডাউনের বাইরে ক্লিক করলে সেটা বন্ধ হয়ে যাবে
+document.addEventListener('click', function(e){
+    const wrap = document.getElementById('chartRangeDropdown');
+    const menu = document.getElementById('chartRangeMenu');
+    if (wrap && menu && menu.style.display === 'block' && !wrap.contains(e.target)) {
+        menu.style.display = 'none';
+    }
+});
+/* ================= PREMIUM REPORT CALENDAR FUNCTIONS ================= */
+
+function toggleReportCalendar(target) {
+    reportCalTarget = target;
+    const activeDateStr = target === 'from' ? reportStartDate : reportEndDate;
+    const base = activeDateStr ? new Date(activeDateStr + 'T00:00:00') : new Date();
+    reportCalYear = base.getFullYear();
+    reportCalMonth = base.getMonth();
+    renderReportCalendarGrid();
+    document.getElementById('reportCalendarModal').classList.add('show');
+}
+
+function closeReportCalendar() {
+    document.getElementById('reportCalendarModal').classList.remove('show');
+}
+
+function changeReportCalMonth(delta) {
+    reportCalMonth += delta;
+    if (reportCalMonth > 11) { reportCalMonth = 0; reportCalYear++; }
+    if (reportCalMonth < 0) { reportCalMonth = 11; reportCalYear--; }
+    renderReportCalendarGrid();
+}
+
+function renderReportCalendarGrid() {
+    const grid = document.getElementById('reportCalGrid');
+    const label = document.getElementById('reportCalMonthYearLabel');
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    label.textContent = monthNames[reportCalMonth] + ' ' + reportCalYear;
+
+    let html = '<div class="day-header">Su</div><div class="day-header">Mo</div><div class="day-header">Tu</div><div class="day-header">We</div><div class="day-header">Th</div><div class="day-header">Fr</div><div class="day-header">Sa</div>';
+
+    const firstDay = new Date(reportCalYear, reportCalMonth, 1).getDay();
+    const daysInMonth = new Date(reportCalYear, reportCalMonth + 1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) html += '<div class="empty"></div>';
+
+    const activeDateStr = reportCalTarget === 'from' ? reportStartDate : reportEndDate;
+    const activeDate = activeDateStr ? new Date(activeDateStr + 'T00:00:00') : null;
+    const today = new Date();
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const isSelected = activeDate && activeDate.getDate() === d && activeDate.getMonth() === reportCalMonth && activeDate.getFullYear() === reportCalYear;
+        const isToday = today.getDate() === d && today.getMonth() === reportCalMonth && today.getFullYear() === reportCalYear;
+        html += `<div class="${isSelected ? 'selected' : ''} ${isToday ? 'pill' : ''}" onclick="selectReportDate(${d})">${d}</div>`;
+    }
+    grid.innerHTML = html;
+}
+
+function selectReportDate(d) {
+    const selected = new Date(reportCalYear, reportCalMonth, d);
+    const formatted = selected.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+
+    if (reportCalTarget === 'from') {
+        reportStartDate = toLocalISODate(selected);
+        document.getElementById('fromDateBtn').textContent = '📅 ' + formatted;
+    } else {
+        reportEndDate = toLocalISODate(selected);
+        document.getElementById('toDateBtn').textContent = '📅 ' + formatted;
+    }
+
+    closeReportCalendar();
+    renderReports(); // রিপোর্ট রিফ্রেশ হবে
+}
+
+function resetReportDates() {
+    reportStartDate = '';
+    reportEndDate = '';
+    document.getElementById('fromDateBtn').textContent = '📅 Select Date';
+    document.getElementById('toDateBtn').textContent = '📅 Select Date';
+    closeReportCalendar();
+    renderReports();
+}
+
+/* ================= NEW FEATURE: OFFERS & DISCOUNTS ================= */
+
+// অফার লিস্ট রেন্ডার
+function renderOffersList(){
+  const box = document.getElementById('offersList');
+  if(!box) return;
+  const offers = state.offers || [];
+  box.innerHTML = offers.length ? offers.map((o,i) => `
+    <div class="row">
+      <div>
+        <b>${escapeHtml(o.name)}</b>
+        <div class="sub">
+          ${o.type === 'percent' ? o.value + '% Off' : '৳' + o.value + ' Off'}
+          · ${escapeHtml(o.startDate)} to ${escapeHtml(o.endDate)}
+          · ${escapeHtml(o.startTime || 'All Day')} to ${escapeHtml(o.endTime || 'End of Day')}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="link" onclick="openEditOffer(${i})">Edit</button>
+        <button class="link danger" onclick="deleteOffer(${i})">Delete</button>
+      </div>
+    </div>
+  `).join('') : '<div class="sub" style="padding:10px 0">No offers created yet.</div>';
+}
+
+// নতুন অফার যোগ করার মডাল
+// অফার মডাল খোলা (Add বা Edit)
+function openAddOffer(){
+  document.getElementById('offerModalTitle').textContent = 'Add New Offer';
+  document.getElementById('offerName').value = '';
+  document.getElementById('offerType').value = 'percent';
+  document.getElementById('offerValue').value = 0;
+  document.getElementById('offerStartDateBtn').textContent = '📅 Select Start';
+  document.getElementById('offerStartDateBtn').dataset.date = '';
+  document.getElementById('offerEndDateBtn').textContent = '📅 Select End';
+  document.getElementById('offerEndDateBtn').dataset.date = '';
+  document.getElementById('offerStartTimeBtn').textContent = 'Select Time';
+  document.getElementById('offerStartTimeBtn').dataset.time = '';
+  document.getElementById('offerEndTimeBtn').textContent = 'Select Time';
+  document.getElementById('offerEndTimeBtn').dataset.time = '';
+
+  // এডিট আইডি রিসেট
+  document.getElementById('offerModal').dataset.editId = '';
+
+  document.getElementById('offerModal').classList.add('show');
+}
+
+function openEditOffer(index){
+  const o = state.offers[index];
+  if(!o) return;
+  document.getElementById('offerModalTitle').textContent = 'Edit Offer';
+  document.getElementById('offerName').value = o.name;
+  document.getElementById('offerType').value = o.type;
+  document.getElementById('offerValue').value = o.value;
+  document.getElementById('offerStartDateBtn').textContent = '📅 ' + new Date(o.startDate + 'T00:00:00').toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+  document.getElementById('offerStartDateBtn').dataset.date = o.startDate;
+  document.getElementById('offerEndDateBtn').textContent = '📅 ' + new Date(o.endDate + 'T00:00:00').toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+  document.getElementById('offerEndDateBtn').dataset.date = o.endDate;
+
+  // টাইম সেট করা
+  document.getElementById('offerStartTimeBtn').textContent = o.startTime ? o.startTime : 'Select Time';
+  document.getElementById('offerStartTimeBtn').dataset.time = o.startTime || '';
+  document.getElementById('offerEndTimeBtn').textContent = o.endTime ? o.endTime : 'Select Time';
+  document.getElementById('offerEndTimeBtn').dataset.time = o.endTime || '';
+
+  document.getElementById('offerModal').dataset.editId = index;
+
+  document.getElementById('offerModal').classList.add('show');
+}
+
+function closeOfferModal(){
+  document.getElementById('offerModal').classList.remove('show');
+}
+
+function saveOfferModal(){
+  const name = document.getElementById('offerName').value.trim();
+  const type = document.getElementById('offerType').value;
+  const value = parseFloat(document.getElementById('offerValue').value) || 0;
+  const startDate = document.getElementById('offerStartDateBtn').dataset.date || '';
+  const endDate = document.getElementById('offerEndDateBtn').dataset.date || '';
+
+  // নতুন টাইম ভ্যালু বাটন থেকে নেওয়া
+  const startTime = document.getElementById('offerStartTimeBtn').dataset.time || '';
+  const endTime = document.getElementById('offerEndTimeBtn').dataset.time || '';
+
+  if(!name) return showAlertDialog('Please enter an offer name.');
+  if(!startDate || !endDate) return showAlertDialog('Please select both Start and End dates.');
+  if(value <= 0) return showAlertDialog('Please enter a valid discount value.');
+
+  const editId = document.getElementById('offerModal').dataset.editId;
+  if(editId !== ''){
+    // এডিটের সময় আগের id বজায় রাখা হচ্ছে, নতুন id বসিয়ে দিলে অফারটির পরিচয়ই বদলে যেত
+    const existing = state.offers[parseInt(editId)];
+    const offerData = { id: existing ? existing.id : uid(), name, type, value, startDate, endDate, startTime, endTime };
+    state.offers[parseInt(editId)] = offerData;
+  } else {
+    const offerData = { id: uid(), name, type, value, startDate, endDate, startTime, endTime };
+    state.offers.push(offerData);
+  }
+
+  save(); renderOffersList(); renderPOSGrid();
+  closeOfferModal();
+  showToast('Offer saved successfully!', 'success');
+}
+
+// প্রিমিয়াম ক্যালেন্ডার লজিক (Offer এর জন্য)
+let offerCalTarget = 'start';
+let offerCalYear = new Date().getFullYear();
+let offerCalMonth = new Date().getMonth();
+
+function openOfferCalendar(target){
+  offerCalTarget = target;
+  const btnId = target === 'start' ? 'offerStartDateBtn' : 'offerEndDateBtn';
+  const existingDate = document.getElementById(btnId).dataset.date;
+  const base = existingDate ? new Date(existingDate + 'T00:00:00') : new Date();
+  offerCalYear = base.getFullYear();
+  offerCalMonth = base.getMonth();
+  renderOfferCalendarGrid();
+  document.getElementById('offerCalendarModal').classList.add('show');
+}
+
+function closeOfferCalendar(){
+  document.getElementById('offerCalendarModal').classList.remove('show');
+}
+
+function changeOfferCalMonth(delta){
+  offerCalMonth += delta;
+  if(offerCalMonth > 11){ offerCalMonth = 0; offerCalYear++; }
+  if(offerCalMonth < 0){ offerCalMonth = 11; offerCalYear--; }
+  renderOfferCalendarGrid();
+}
+
+function renderOfferCalendarGrid(){
+  const grid = document.getElementById('offerCalGrid');
+  const label = document.getElementById('offerCalMonthYearLabel');
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  label.textContent = monthNames[offerCalMonth] + ' ' + offerCalYear;
+
+  let html = '<div class="day-header">Su</div><div class="day-header">Mo</div><div class="day-header">Tu</div><div class="day-header">We</div><div class="day-header">Th</div><div class="day-header">Fr</div><div class="day-header">Sa</div>';
+
+  const firstDay = new Date(offerCalYear, offerCalMonth, 1).getDay();
+  const daysInMonth = new Date(offerCalYear, offerCalMonth + 1, 0).getDate();
+
+  const btnId = offerCalTarget === 'start' ? 'offerStartDateBtn' : 'offerEndDateBtn';
+  const existingDateStr = document.getElementById(btnId).dataset.date;
+  const existingDate = existingDateStr ? new Date(existingDateStr + 'T00:00:00') : null;
+  const today = new Date();
+
+  for (let i=0; i<firstDay; i++) html += '<div class="empty"></div>';
+  for (let d=1; d<=daysInMonth; d++){
+    const isSelected = existingDate && existingDate.getDate() === d && existingDate.getMonth() === offerCalMonth && existingDate.getFullYear() === offerCalYear;
+    const isToday = today.getDate() === d && today.getMonth() === offerCalMonth && today.getFullYear() === offerCalYear;
+    html += `<div class="${isSelected ? 'selected' : ''} ${isToday ? 'pill' : ''}" onclick="selectOfferDate(${d})">${d}</div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function selectOfferDate(d){
+  const selected = new Date(offerCalYear, offerCalMonth, d);
+  const formatted = selected.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+  const isoString = toLocalISODate(selected); // স্থানীয় তারিখ, UTC নয় — timezone bug এড়াতে
+
+  if(offerCalTarget === 'start'){
+    document.getElementById('offerStartDateBtn').textContent = '📅 ' + formatted;
+    document.getElementById('offerStartDateBtn').dataset.date = isoString;
+  } else {
+    document.getElementById('offerEndDateBtn').textContent = '📅 ' + formatted;
+    document.getElementById('offerEndDateBtn').dataset.date = isoString;
+  }
+  closeOfferCalendar();
+}
+
+// অফার ডিলিট
+async function deleteOffer(index){
+  const ok = await showConfirmDialog('Are you sure you want to delete this offer?', {danger:true, title:'Delete Offer'});
+  if(!ok) return;
+  state.offers.splice(index, 1);
+  save(); renderOffersList(); renderPOSGrid();
+  showToast('Offer deleted.', 'success');
+}
+
+// বর্তমান সময়ে সক্রিয় অফার খোঁজা (POS-এ ব্যবহারের জন্য)
+// নোট: এখানে toLocalISODate() ব্যবহার করা হচ্ছে, toISOString() নয় — কারণ toISOString() UTC টাইমে
+// রূপান্তর করে, যা বাংলাদেশের (UTC+6) মতো টাইমজোনে রাত ১২টা-ভোর ৬টার মধ্যে ভুল (আগের দিনের) তারিখ দিত,
+// ফলে অফার সঠিক সময়ে চালু/বন্ধ না হওয়ার ঝুঁকি থাকত
+function getActiveOfferForDate(){
+  const now = new Date();
+  const todayStrDate = toLocalISODate(now); // YYYY-MM-DD, স্থানীয় তারিখ
+  const nowTimeStr = now.toTimeString().slice(0,5); // HH:MM, স্থানীয় সময়
+
+  return (state.offers || []).find(o => {
+    return o.startDate <= todayStrDate && o.endDate >= todayStrDate &&
+           (o.startTime ? nowTimeStr >= o.startTime : true) &&
+           (o.endTime ? nowTimeStr <= o.endTime : true);
+  });
+}
+
+/* ================= PREMIUM OFFER TIME PICKER LOGIC ================= */
+let offerTimeTarget = 'start';
+let offerTimeHour = 12;
+let offerTimeMinute = 0;
+let offerTimePeriod = 'AM';
+
+function openOfferTimePicker(target) {
+    offerTimeTarget = target;
+    // বাটনে আগে টাইম থাকলে সেটা থেকে লোড করা, না থাকলে ডিফল্ট
+    const existingTime = document.getElementById(target === 'start' ? 'offerStartTimeBtn' : 'offerEndTimeBtn').dataset.time;
+
+    if (existingTime) {
+        const [h, m] = existingTime.split(':');
+        let hour = parseInt(h);
+        offerTimePeriod = hour >= 12 ? 'PM' : 'AM';
+        offerTimeHour = hour % 12 === 0 ? 12 : hour % 12;
+        offerTimeMinute = parseInt(m);
+    } else {
+        offerTimeHour = 12;
+        offerTimeMinute = 0;
+        offerTimePeriod = 'AM';
+    }
+
+    renderOfferTimeGrid();
+    document.getElementById('offerTimeModal').classList.add('show');
+}
+
+function closeOfferTimePicker() {
+    document.getElementById('offerTimeModal').classList.remove('show');
+}
+
+function changeOfferTimeHour(delta) {
+    offerTimeHour += delta;
+    if (offerTimeHour > 12) offerTimeHour = 1;
+    if (offerTimeHour < 1) offerTimeHour = 12;
+    renderOfferTimeGrid();
+}
+
+function renderOfferTimeGrid() {
+    const hourList = document.getElementById('offerHourList');
+    const minuteList = document.getElementById('offerMinuteList');
+    const periodList = document.getElementById('offerPeriodList');
+
+    // আপডেট হেডার
+    const header = document.getElementById('offerTimeHeader');
+    header.textContent = `${offerTimeHour} : ${String(offerTimeMinute).padStart(2, '0')} ${offerTimePeriod}`;
+
+    // Hours (1-12)
+    let hHtml = '';
+    for (let i = 1; i <= 12; i++) {
+        hHtml += `<div class="offer-time-item ${offerTimeHour === i ? 'selected' : ''}" onclick="selectOfferTimePart('hour', ${i})">${i}</div>`;
+    }
+    hourList.innerHTML = hHtml;
+
+    // Minutes (00-59)
+    let mHtml = '';
+    for (let i = 0; i < 60; i++) {
+        const m = i < 10 ? '0' + i : i;
+        mHtml += `<div class="offer-time-item ${offerTimeMinute === i ? 'selected' : ''}" onclick="selectOfferTimePart('minute', ${i})">${m}</div>`;
+    }
+    minuteList.innerHTML = mHtml;
+
+    // Period (AM/PM)
+    const pHtml = `
+        <div class="offer-time-item ${offerTimePeriod === 'AM' ? 'selected' : ''}" onclick="selectOfferTimePart('period', 'AM')">AM</div>
+        <div class="offer-time-item ${offerTimePeriod === 'PM' ? 'selected' : ''}" onclick="selectOfferTimePart('period', 'PM')">PM</div>
+    `;
+    periodList.innerHTML = pHtml;
+}
+
+function selectOfferTimePart(type, value) {
+    if (type === 'hour') offerTimeHour = value;
+    else if (type === 'minute') offerTimeMinute = value;
+    else if (type === 'period') offerTimePeriod = value;
+    renderOfferTimeGrid();
+}
+
+function confirmOfferTime() {
+    // 12-ঘণ্টা থেকে 24-ঘণ্টায় রূপান্তর
+    let hour24 = offerTimeHour;
+    if (offerTimePeriod === 'PM' && offerTimeHour !== 12) hour24 = offerTimeHour + 12;
+    if (offerTimePeriod === 'AM' && offerTimeHour === 12) hour24 = 0;
+
+    const timeStr = `${String(hour24).padStart(2, '0')}:${String(offerTimeMinute).padStart(2, '0')}`;
+
+    const btn = document.getElementById(offerTimeTarget === 'start' ? 'offerStartTimeBtn' : 'offerEndTimeBtn');
+    btn.textContent = timeStr;
+    btn.dataset.time = timeStr;
+
+    closeOfferTimePicker();
 }
