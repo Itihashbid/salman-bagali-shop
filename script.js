@@ -137,16 +137,17 @@ const PERMISSION_SCREENS = [
   {key:'customers',    label:'Customers'},
   {key:'ledger',       label:'Due / Ledger'},
   {key:'cash',         label:'Cash Flow'},
+  {key:'expense',      label:'Expense Ledger'},
   {key:'purchases',    label:'Purchases'},
   {key:'returns',      label:'Sales Return'},
   {key:'reports',      label:'Reports'},
   {key:'settings',     label:'Settings'},
 ];
 const ROLE_DEFAULT_PERMISSIONS = {
-  Manager:     ['dashboard','pos','products','barcodePrint','customers','ledger','cash','purchases','returns','reports'],
+  Manager:     ['dashboard','pos','products','barcodePrint','customers','ledger','cash','expense','purchases','returns','reports'],
   Cashier:     ['dashboard','pos','customers','ledger'],
   Salesman:    ['dashboard','pos','customers'],
-  Accountant:  ['dashboard','ledger','cash','purchases','reports'],
+  Accountant:  ['dashboard','ledger','cash','expense','purchases','reports'],
   DeliveryMan: ['dashboard','customers','ledger'],
 };
 
@@ -232,6 +233,7 @@ function emptyState(){
     taxRates: defaultTaxRates(),
     heldOrders: [],
     stockAdjustments: [],
+    expenseCategories: ['General', 'Market', 'Rent', 'Bills', 'Transport', 'Tea'],
   };
 }
 // পুরনো ডেটা (আপডেটের আগের) লোড হলে নতুন ফিল্ডগুলো (heldOrders, stockAdjustments) মিসিং থাকতে পারে — এখানে সেফলি ডিফল্ট বসিয়ে দেওয়া হচ্ছে
@@ -239,6 +241,7 @@ function hydrateStateDefaults(s){
   if(!s) return;
   if(!Array.isArray(s.heldOrders)) s.heldOrders = [];
   if(!Array.isArray(s.stockAdjustments)) s.stockAdjustments = [];
+  if(!Array.isArray(s.expenseCategories) || !s.expenseCategories.length) s.expenseCategories = ['General', 'Market', 'Rent', 'Bills', 'Transport', 'Tea'];
 }
 async function resetDemoData(){
   const ok = await showConfirmDialog('Delete all data and start fresh with an empty shop? This action cannot be undone.', {danger:true, icon:'⚠️', okLabel:'Yes, delete everything', title:'Delete All Data'});
@@ -263,7 +266,7 @@ function show(id, el){
       if(b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${id}'`)) b.classList.add('active');
     });
   }
-  const titles = {dashboard:'Dashboard', pos:'New Sale · POS Billing', products:'Products & Inventory', barcodePrint:'Barcode Print', customers:'Customers', ledger:'Due / Customer Ledger', cash:'Daily Cash Flow', purchases:'Purchases / Stock In', returns:'Sales Return / Exchange', reports:'Reports', settings:'Settings'};
+  const titles = {dashboard:'Dashboard', pos:'New Sale · POS Billing', products:'Products & Inventory', barcodePrint:'Barcode Print', customers:'Customers', ledger:'Due / Customer Ledger', cash:'Daily Cash Flow', expense:'Expense Ledger', purchases:'Purchases / Stock In', returns:'Sales Return / Exchange', reports:'Reports', settings:'Settings'};
   document.getElementById('pageTitle').textContent = titles[id] || id;
   if(id==='dashboard') renderDashboard();
   if(id==='pos') {
@@ -277,6 +280,7 @@ function show(id, el){
   if(id==='barcodePrint') renderBarcodePrintScreen();
   if(id==='settings'){ renderUsersList(); renderPaymentMethodsList(); renderTaxRatesList(); }
   if(id==='admin') renderAdminPanel();
+  if(id==='expense') renderExpenseLedger();
   window.scrollTo(0,0);
 }
 function resetPOSExtras(){
@@ -3206,4 +3210,175 @@ async function exitImpersonation() {
     if(adminNavBtn) adminNavBtn.style.display = '';
     document.getElementById('pageTitle').textContent = 'Super Admin Dashboard';
     showToast('সুপার অ্যাডমিন প্যানেলে ফিরে এসেছেন', 'success');
+}
+/* ================= NEW FEATURE: DAILY EXPENSE LEDGER ================= */
+
+// মাসের স্ট্রিং (YYYY-MM) বের করা, date ফরম্যাট নির্বিশেষে (todayStr() এর "06 Sep 2026" ফরম্যাট থেকেও কাজ করবে)
+function expenseMonthKey(dateStr){
+  if(!dateStr) return '';
+  const d = new Date(dateStr);
+  if(isNaN(d)) return '';
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
+
+// ===== কাস্টম ক্যালেন্ডার (তারিখ ধরে খরচ ফিল্টার করার জন্য) =====
+let currentCalYear = new Date().getFullYear();
+let currentCalMonth = new Date().getMonth();
+let selectedExpenseDate = null;
+
+function toggleCalendar() {
+    const cal = document.getElementById('customCalendar');
+    if (cal.style.display === 'none') {
+        renderCalendarGrid();
+        cal.style.display = 'block';
+    } else {
+        cal.style.display = 'none';
+    }
+}
+function changeCalendarMonth(delta) {
+    currentCalMonth += delta;
+    if (currentCalMonth > 11) { currentCalMonth = 0; currentCalYear++; }
+    if (currentCalMonth < 0) { currentCalMonth = 11; currentCalYear--; }
+    renderCalendarGrid();
+}
+function renderCalendarGrid() {
+    const grid = document.getElementById('calGrid');
+    const label = document.getElementById('calMonthYearLabel');
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    label.textContent = monthNames[currentCalMonth] + ' ' + currentCalYear;
+
+    let html = '<div class="day-header">Su</div><div class="day-header">Mo</div><div class="day-header">Tu</div><div class="day-header">We</div><div class="day-header">Th</div><div class="day-header">Fr</div><div class="day-header">Sa</div>';
+
+    const firstDay = new Date(currentCalYear, currentCalMonth, 1).getDay();
+    const daysInMonth = new Date(currentCalYear, currentCalMonth + 1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) html += '<div class="empty"></div>';
+
+    const today = new Date();
+    for (let d = 1; d <= daysInMonth; d++) {
+        const isSelected = selectedExpenseDate && selectedExpenseDate.getDate() === d && selectedExpenseDate.getMonth() === currentCalMonth && selectedExpenseDate.getFullYear() === currentCalYear;
+        const isToday = today.getDate() === d && today.getMonth() === currentCalMonth && today.getFullYear() === currentCalYear;
+        html += `<div class="${isSelected ? 'selected' : ''} ${isToday ? 'pill' : ''}" onclick="selectExpenseDate(${d})">${d}</div>`;
+    }
+    grid.innerHTML = html;
+}
+function selectExpenseDate(d) {
+    selectedExpenseDate = new Date(currentCalYear, currentCalMonth, d);
+    document.getElementById('customCalendar').style.display = 'none';
+    document.getElementById('expenseDateLabel').textContent = selectedExpenseDate.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+    renderExpenseLedger();
+}
+function resetExpenseFilter() {
+    selectedExpenseDate = null;
+    document.getElementById('expenseDateLabel').textContent = 'Select Date';
+    document.getElementById('customCalendar').style.display = 'none';
+    renderExpenseLedger();
+}
+
+// ===== খরচ যোগ করার মডাল (ক্যাটাগরি ড্রপডাউন + নতুন ক্যাটাগরি যোগ) =====
+function openExpenseModal() {
+    const select = document.getElementById('expCatSelect');
+    select.innerHTML = state.expenseCategories.map(c=>`<option>${escapeHtml(c)}</option>`).join('');
+    document.getElementById('expDesc').value = '';
+    document.getElementById('expAmount').value = 0;
+    document.getElementById('expenseModal').classList.add('show');
+}
+function closeExpenseModal() {
+    document.getElementById('expenseModal').classList.remove('show');
+}
+function addNewExpenseCategory() {
+    showPromptDialog('Enter new category name:', '', {title:'New Category'}).then(cat => {
+        if (cat && cat.trim()) {
+            if (!state.expenseCategories.includes(cat.trim())) {
+                state.expenseCategories.push(cat.trim());
+                save(); // Firestore-এ সেভ হবে
+            }
+            const select = document.getElementById('expCatSelect');
+            select.innerHTML = state.expenseCategories.map(c=>`<option>${escapeHtml(c)}</option>`).join('');
+            select.value = cat.trim();
+            showToast('Category added!', 'success');
+        }
+    });
+}
+function saveExpense() {
+    const category = document.getElementById('expCatSelect').value || 'General';
+    const desc = document.getElementById('expDesc').value;
+    const amount = parseFloat(document.getElementById('expAmount').value) || 0;
+    if (amount <= 0) { showAlertDialog('Please enter a valid amount.'); return; }
+
+    state.cash.push({
+        time: nowTime(),
+        date: todayStr(),
+        category: category,
+        desc: desc,
+        type:'out',
+        amount: amount
+    });
+    save(); renderExpenseLedger(); renderCashTable(); renderDashboard();
+    closeExpenseModal();
+}
+// পুরনো কল-সাইট (যেমন Cash Flow পেজের "+ Add Expense" বাটন) এখনো openAddExpense() ব্যবহার করে,
+// তাই সেগুলো ভাঙা এড়াতে এটাকে নতুন মডালের দিকে alias করে দেওয়া হলো
+function openAddExpense(){ openExpenseModal(); }
+
+// ===== তারিখ/মাস অনুযায়ী লিস্ট রেন্ডার করা =====
+function renderExpenseLedger(){
+  const box = document.getElementById('expenseLedgerList');
+  if(!box) return;
+  const selectedMonth = selectedExpenseDate ? expenseMonthKey(selectedExpenseDate) : new Date().toISOString().slice(0,7);
+
+  const monthExpenses = state.cash.filter(c => c.type === 'out' && expenseMonthKey(c.date) === selectedMonth);
+
+  // নির্দিষ্ট তারিখ বাছাই করা থাকলে, শুধু সেই দিনের খরচ দেখানো হবে
+  let finalExpenses = monthExpenses;
+  if (selectedExpenseDate) {
+    const targetDate = selectedExpenseDate.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+    finalExpenses = monthExpenses.filter(e => e.date === targetDate);
+  }
+
+  const grouped = {};
+  finalExpenses.forEach(e => {
+    if(!grouped[e.date]) grouped[e.date] = { total: 0, items: [] };
+    grouped[e.date].total += e.amount;
+    grouped[e.date].items.push(e);
+  });
+
+  const sortedDates = Object.keys(grouped).sort((a,b) => new Date(b) - new Date(a));
+  let html = '';
+  let grandTotal = 0;
+
+  sortedDates.forEach(date => {
+    const dayData = grouped[date];
+    grandTotal += dayData.total;
+    const sortedItems = dayData.items.slice().reverse();
+
+    html += `<div class="panel" style="margin-bottom:10px; border:1px solid var(--line);">
+        <div class="head">
+            <h2>📅 ${escapeHtml(date)}</h2>
+            <b style="color:var(--red)">Total: ${fmt(dayData.total)}</b>
+        </div>
+        <div class="rows">
+            ${sortedItems.map(item => `
+                <div class="row">
+                    <div>
+                        <b>${escapeHtml(item.category || 'General')}</b>
+                        <div class="sub">🕒 ${escapeHtml(item.time || '')} - ${escapeHtml(item.desc || 'No Note')}</div>
+                    </div>
+                    <b class="danger">-${fmt(item.amount)}</b>
+                </div>
+            `).join('')}
+        </div>
+    </div>`;
+  });
+
+  document.getElementById('expenseTotal').textContent = fmt(grandTotal);
+  box.innerHTML = html || '<div class="sub" style="padding:20px; text-align:center">No expenses found for this date.</div>';
+}
+
+// ===== "This Month" বাটন — তারিখ ফিল্টার রিসেট করে চলতি মাস দেখাবে =====
+function setExpenseMonth(){
+  selectedExpenseDate = null;
+  const label = document.getElementById('expenseDateLabel');
+  if(label) label.textContent = 'Select Date';
+  renderExpenseLedger();
 }

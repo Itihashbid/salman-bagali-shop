@@ -190,3 +190,26 @@ body.dark .receipt { background: #111; color: #eee; }
 
 /* Due Collection Receipt Styling */
 #dueReceiptContent { width: 100%; font-family: "Courier New", monospace; }
+/* Premium Expense Ledger Design */
+#expenseLedgerList .panel {
+    background: var(--card);
+    border-radius: 14px;
+}
+#expenseLedgerList .row {
+    padding: 10px 0;
+}
+/* Premium Custom Calendar */
+.calendar-wrapper { position: relative; display: inline-block; }
+.custom-calendar { position: absolute; top: 110%; left: 0; background: var(--card); border-radius: 16px; box-shadow: 0 15px 40px rgba(0,0,0,0.12); padding: 15px; z-index: 100; width: 300px; border: 1px solid var(--line); }
+.cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.cal-header button { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--green); padding: 5px 10px; border-radius: 8px; }
+.cal-header button:hover { background: #edf3ef; }
+#calMonthYearLabel { font-weight: 700; font-size: 15px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+.cal-grid div { padding: 9px; border-radius: 10px; cursor: pointer; font-size: 13px; }
+.cal-grid div:hover { background: var(--green); color: white; transform: scale(1.05); }
+.cal-grid div.selected { background: var(--gold); color: white; font-weight: bold; box-shadow: 0 4px 10px rgba(185,155,97,0.4); }
+.cal-grid .day-header { font-weight: bold; color: var(--muted); cursor: default; pointer-events: none; }
+.cal-grid .empty { pointer-events: none; }
+/* Expense Modal Category Add Wrapper */
+.cat-add-wrapper { display: flex; gap: 8px; align-items: center; }

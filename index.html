@@ -73,6 +73,7 @@
   <button data-screen="customers" onclick="show('customers',this)">♙ &nbsp; Customers</button>
   <button data-screen="ledger" onclick="show('ledger',this)">৳ &nbsp; Due / Ledger</button>
   <button data-screen="cash" onclick="show('cash',this)">◈ &nbsp; Cash Flow</button>
+  <button data-screen="expense" onclick="show('expense',this)">📒 &nbsp; Expense Ledger</button>
   <button data-screen="purchases" onclick="show('purchases',this)">＋ &nbsp; Purchases</button>
   <button data-screen="returns" onclick="show('returns',this)">↩ &nbsp; Sales Return</button>
   <button data-screen="reports" onclick="show('reports',this)">⌁ &nbsp; Reports</button>
@@ -254,6 +255,33 @@
 </div>
 </div></div></section>
 
+<section id="expense" class="screen">
+ <div class="panel">
+  <div class="head">
+   <h2>📒 Daily Expense Ledger</h2>
+   <button class="btn primary" onclick="openExpenseModal()">＋ Add Expense</button>
+  </div>
+  <div class="toolbar">
+   <div class="calendar-wrapper">
+    <button class="btn soft" onclick="toggleCalendar()">📅 <span id="expenseDateLabel">Select Date</span></button>
+    <div id="customCalendar" class="custom-calendar" style="display:none;">
+        <div class="cal-header">
+            <button onclick="changeCalendarMonth(-1)">‹</button>
+            <span id="calMonthYearLabel">Month Year</span>
+            <button onclick="changeCalendarMonth(1)">›</button>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+        <button class="link" style="width:100%; margin-top:10px;" onclick="resetExpenseFilter()">Show Full Month</button>
+    </div>
+   </div>
+   <button class="btn soft" onclick="setExpenseMonth()">This Month</button>
+  </div>
+  <div class="cards" style="margin-bottom:15px">
+   <div class="card"><div class="label">Total Expense (Selected Month)</div><div class="num danger" id="expenseTotal">৳0</div></div>
+  </div>
+  <div id="expenseLedgerList" style="display:grid; gap:15px;"></div>
+ </div>
+</section>
 <section id="admin" class="screen">
   <div class="panel">
     <div class="head"><h2>👑 Super Admin Dashboard</h2></div>
@@ -484,5 +512,23 @@
 </div>
 
 <script src="script.js" defer></script>
+<div class="modal" id="expenseModal">
+ <div class="receiptWrap" style="width:400px;max-width:92vw">
+  <h2 style="margin:0 0 14px;font-size:17px">Add New Expense</h2>
+  <div class="field">
+   <label>Category / Place</label>
+   <div class="cat-add-wrapper">
+    <select id="expCatSelect" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select>
+    <button class="btn soft" onclick="addNewExpenseCategory()">＋</button>
+   </div>
+  </div>
+  <div class="field"><label>Details / Note</label><input id="expDesc" placeholder="Write details..."></div>
+  <div class="field"><label>Amount</label><input type="number" id="expAmount" value="0"></div>
+  <div class="modalBtns">
+   <button class="btn soft" onclick="closeExpenseModal()">Cancel</button>
+   <button class="btn primary" onclick="saveExpense()">Save</button>
+  </div>
+ </div>
+</div>
 </body>
 </html>
