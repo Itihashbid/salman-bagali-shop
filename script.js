@@ -772,7 +772,7 @@ function openReceipt(){
   }
   if(p.due>0){
     const bal = customer!=='Walk-in Customer' ? (state.customers.find(c=>c.name===customer)||{due:p.due}).due : p.due;
-    state.ledger.push({date: todayStr(), customer, invoice, debit:t.total, credit:0, balance:bal});
+    state.ledger.push({date: todayStr(), customer, invoice, debit:p.due, credit:0, balance:bal});
   }
   PAYMENT_METHODS.forEach(m=>{
     if(p.amounts[m.key]>0){
