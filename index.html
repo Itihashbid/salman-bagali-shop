@@ -440,7 +440,12 @@
   <div class="field"><label>Category</label><div style="display:flex;gap:6px"><select id="pf_category" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="quickAddMeta('categories','pf_category')">＋</button></div></div>
   <div class="field"><label>Brand</label><div style="display:flex;gap:6px"><select id="pf_brand" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="quickAddMeta('brands','pf_brand')">＋</button></div></div>
   <div class="field"><label>Unit</label><div style="display:flex;gap:6px"><select id="pf_unit" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="quickAddMeta('units','pf_unit')">＋</button></div></div>
-  <div class="field"><label>Tax Rate</label><select id="pf_tax" style="padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select></div>
+  <div class="field"><label>Tax Rate</label>
+    <div style="display:flex;gap:6px">
+      <select id="pf_tax" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select>
+      <button type="button" class="btn soft" onclick="quickAddTax()">＋</button>
+    </div>
+  </div>
   <div class="field" style="grid-column:1/-1"><label>Product Type</label><select id="pf_type" onchange="productTypeChanged()" style="padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"><option value="simple">Simple (single price/stock)</option><option value="variable">Variable (has variations, e.g. sizes)</option></select></div>
   <div class="field"><label>Low Stock Alert Quantity</label><input id="pf_lowStockAlert" type="number" min="0" value="5"><small class="sub" style="margin-top:3px;display:block">Warn when total stock falls to or below this</small></div>
  </div>

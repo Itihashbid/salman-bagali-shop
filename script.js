@@ -177,9 +177,10 @@ function defaultPaymentMethods(){
 }
 function defaultTaxRates(){
   return [
+    {id:uid(), name:'No Tax', rate:0, isDefault:true},           // নতুন ডিফল্ট: কোনো ট্যাক্স নাই
     {id:uid(), name:'VAT 0%', rate:0, isDefault:false},
     {id:uid(), name:'VAT 5%', rate:5, isDefault:false},
-    {id:uid(), name:'VAT 10%', rate:10, isDefault:true},
+    {id:uid(), name:'VAT 10%', rate:10, isDefault:false},
     {id:uid(), name:'VAT 15%', rate:15, isDefault:false},
   ];
 }
@@ -250,6 +251,12 @@ function hydrateStateDefaults(s){
   if(!Array.isArray(s.stockAdjustments)) s.stockAdjustments = [];
   if(!Array.isArray(s.expenseCategories) || !s.expenseCategories.length) s.expenseCategories = ['General', 'Market', 'Rent', 'Bills', 'Transport', 'Tea'];
   if(!Array.isArray(s.offers)) s.offers = [];
+  // পুরনো ডেটায় যদি 'No Tax' না থাকে সেটি যোগ করা
+  if(s.taxRates && s.taxRates.length && !s.taxRates.some(t => t.name === 'No Tax')) {
+      s.taxRates.unshift({id:uid(), name:'No Tax', rate:0, isDefault:true});
+      // আগের ডিফল্টটি সরিয়ে দেওয়া
+      s.taxRates.forEach(t => { if(t.name !== 'No Tax') t.isDefault = false; });
+  }
 }
 async function resetDemoData(){
   const ok = await showConfirmDialog('Delete all data and start fresh with an empty shop? This action cannot be undone.', {danger:true, icon:'⚠️', okLabel:'Yes, delete everything', title:'Delete All Data'});
@@ -3936,4 +3943,41 @@ function confirmOfferTime() {
     btn.dataset.time = timeStr;
 
     closeOfferTimePicker();
+}
+
+/* ================= QUICK ADD CUSTOM TAX FROM PRODUCT FORM ================= */
+
+// প্রোডাক্ট ফর্ম থেকে দ্রুত নতুন ট্যাক্স যোগ করার ফাংশন
+async function quickAddTax() {
+    // ১. নাম ও শতাংশ ইনপুট নেওয়া
+    const taxName = await showPromptDialog('Tax rate name (e.g., VAT 20%):', 'VAT 20%', {title:'Add New Tax Rate'});
+    if(!taxName || !taxName.trim()) return;
+
+    const taxRateStr = await showPromptDialog('Enter percentage (e.g., 20):', '20', {title:'Tax Percentage'});
+    if(taxRateStr === null) return;
+
+    const rate = Math.max(0, Math.min(100, parseFloat(taxRateStr) || 0));
+
+    // ২. ডেটাবেসে যোগ করা
+    ensureMetaLists();
+    if(state.taxRates.some(t => t.name.toLowerCase() === taxName.trim().toLowerCase())) {
+        showAlertDialog('A tax with this name already exists.');
+        return;
+    }
+
+    state.taxRates.push({id: uid(), name: taxName.trim(), rate: rate, isDefault: false});
+    save(); // Firestore-এ সেভ হবে
+
+    // ৩. প্রোডাক্ট ফর্মের ড্রপডাউন রিফ্রেশ করে নতুন ট্যাক্সটি সিলেক্ট করা
+    fillTaxSelect();
+    const taxSel = document.getElementById('pf_tax');
+    if(taxSel) {
+        // নতুন যোগ করা ট্যাক্সটি সিলেক্ট করা
+        const newTax = state.taxRates[state.taxRates.length - 1];
+        taxSel.value = newTax.id;
+    }
+
+    // ৪. Settings পেজের Tax Rates লিস্টও আপডেট করা
+    renderTaxRatesList();
+    showToast('Tax added successfully!', 'success');
 }
