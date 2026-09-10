@@ -217,7 +217,13 @@ let originalShopId = null;
 function save(){
   if(isRemoteUpdate || !currentShopId) return; // avoid re-saving remote data, or saving before login
   if(isImpersonating) return; // Super Admin viewing a shop cannot alter that shop's data
-  if(window.Firebase) window.Firebase.saveState(currentShopId, state);
+  if(!window.Firebase) return;
+  // [সংশোধিত] সেভ ব্যর্থ হলে এখন ইউজারকে সরাসরি জানানো হবে, চুপচাপ ডেটা হারানোর ঝুঁকি এড়াতে
+  window.Firebase.saveState(currentShopId, state).then(ok=>{
+    if(ok === false){
+      showToast('⚠️ ডেটা সেভ করা যায়নি! ইন্টারনেট সংযোগ চেক করুন।', 'error');
+    }
+  });
 }
 function emptyState(){
   return {
@@ -641,7 +647,8 @@ function addToCart(key){
       image: p.image,
       disc: 0, // ম্যানুয়াল পার-আইটেম ডিসকাউন্টের জন্য (আলাদা ফিচার)
       basePrice: basePrice, // আসল দাম রাখা হল যাতে রিসিটে প্রমাণ থাকে
-      discApplied: basePrice - finalPrice
+      discApplied: basePrice - finalPrice,
+      cost: +p.purchase || 0 // [নতুন] বিক্রির মুহূর্তের Purchase Price স্ন্যাপশট — পরে Purchase Price বদলালেও পুরনো বিক্রির Profit হিসাব সঠিক থাকবে
     });
   }
   renderCart();
@@ -737,13 +744,39 @@ function handleScanEnter(e){
     box.focus();
   }
 }
-function openReceipt(){
+async function openReceipt(){
+  if(isImpersonating){
+    showAlertDialog('সুপার অ্যাডমিন মোডে আপনি বিক্রি করতে পারবেন না। এটি শুধু দেখার জন্য।', {icon:'🚫', title:'Not Allowed'});
+    return;
+  }
   if(!cart.length){ showAlertDialog('Add at least one product to the cart first.', {icon:'🛒'}); return; }
   const customer = document.getElementById('posCustomer').value || 'Walk-in Customer';
   const t = computeTotals(); // {subtotal, discountAmt, vatPercent, vatAmt, total}
   const p = getPaymentSplit(t.total); // {amounts:{cash,bkash,nagad,bank,card}, paid, due, overpaid}
   if(p.overpaid>0){ showAlertDialog('The amount paid is more than the bill total. Please fix the payment amounts.', {icon:'৳'}); return; }
-  const invoice = state.settings.invoicePrefix + (state.invoiceCounter++);
+
+  // [সংশোধিত] Invoice নম্বর এখন Firestore transaction দিয়ে atomic ভাবে তৈরি হয়,
+  // যাতে একাধিক staff একই সময়ে বিক্রি করলেও কখনো একই Invoice নম্বর না হয়
+  const payBtn = document.querySelector('.pos .print');
+  if(payBtn) payBtn.disabled = true; // ডাবল-ক্লিকে ডাবল-সেল হওয়া প্রতিরোধ
+  let invoiceNumber;
+  if(isImpersonating){
+    // সুপার অ্যাডমিন শুধু দোকান দেখছেন — এক্ষেত্রে Firestore-এ সরাসরি কাউন্টার বাড়ানো হবে না
+    invoiceNumber = state.invoiceCounter;
+    state.invoiceCounter++;
+  } else {
+    try{
+      invoiceNumber = await window.Firebase.getNextInvoiceNumber(currentShopId);
+      state.invoiceCounter = invoiceNumber + 1;
+    }catch(e){
+      console.error('Invoice number generation failed', e);
+      if(payBtn) payBtn.disabled = false;
+      showAlertDialog('ইনভয়েস নম্বর তৈরি করতে সমস্যা হয়েছে। ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন।', {icon:'⚠️'});
+      return;
+    }
+  }
+  if(payBtn) payBtn.disabled = false;
+  const invoice = state.settings.invoicePrefix + invoiceNumber;
 
   // reduce stock
   cart.forEach(item=>{
@@ -757,7 +790,7 @@ function openReceipt(){
 
   const saleRecord = {
     invoice, customer, time: nowTime(), date: todayStr(),
-    items: cart.map(c=>({id:c.id, name:c.name, price:c.price, qty:c.qty})),
+    items: cart.map(c=>({id:c.id, name:c.name, price:c.price, qty:c.qty, cost:c.cost||0})), // [সংশোধিত] cost যোগ করা হলো
     subtotal: t.subtotal, discount: t.discountAmt, vatPercent: t.vatPercent, vat: t.vatAmt,
     total: t.total, paid: {...p.amounts}, paidCash: p.amounts.cash, paidBkash: p.amounts.bkash, due: p.due, payment: paymentLabel
   };
@@ -772,7 +805,7 @@ function openReceipt(){
   }
   if(p.due>0){
     const bal = customer!=='Walk-in Customer' ? (state.customers.find(c=>c.name===customer)||{due:p.due}).due : p.due;
-    state.ledger.push({date: todayStr(), customer, invoice, debit:p.due, credit:0, balance:bal});
+    state.ledger.push({date: todayStr(), customer, invoice, debit:t.total, credit:p.paid, balance:bal});
   }
   PAYMENT_METHODS.forEach(m=>{
     if(p.amounts[m.key]>0){
@@ -1274,18 +1307,6 @@ function renderCashTable(){
     <td>${c.time}</td><td>${c.desc}</td><td>${c.type==='in'?'Cash In':'Expense'}</td><td class="${c.type==='out'?'danger':''}">${c.type==='in'?'+':'−'}${fmt(c.amount)}</td>
   </tr>`).join('');
 }
-function openAddExpense(){
-  openFormModal('Add New Expense', [
-    {id:'desc', label:'Description', value:''},
-    {id:'amount', label:'Amount', type:'number', value:0},
-  ], (v)=>{
-    const amt = +v.amount || 0;
-    if(!v.desc.trim() || amt<=0){ showAlertDialog('Please enter a description and a valid amount.'); return false; }
-    state.cash.push({time: nowTime(), desc:v.desc, type:'out', amount:amt});
-    save(); renderCashTable(); renderDashboard();
-  });
-}
-
 /* ===================== SUPPLIERS ===================== */
 function renderSuppliersTable(){
   const body = document.getElementById('suppliersTableBody');
@@ -1567,8 +1588,15 @@ function renderReports(){
   const totalSales = filteredSales.reduce((a,s)=>a+s.total,0);
   const itemsSold = filteredSales.reduce((a,s)=>a+s.items.reduce((b,i)=>b+i.qty,0),0);
   const estProfit = filteredSales.reduce((a,s)=>a+s.items.reduce((b,i)=>{
-    const p = state.products.find(x=>x.name===i.name);
-    const cost = p ? p.purchase : i.price*0.85;
+    // [সংশোধিত] নতুন বিক্রিতে cost স্ন্যাপশট থাকলে সেটাই ব্যবহার করা হবে (সবসময় সঠিক থাকবে),
+    // পুরনো বিক্রি (cost ফিল্ড নেই) হলে আগের মতোই বর্তমান Purchase Price দিয়ে আন্দাজ করা হবে
+    let cost;
+    if(i.cost !== undefined && i.cost !== null){
+      cost = i.cost;
+    } else {
+      const p = state.products.find(x=>x.name===i.name);
+      cost = p ? p.purchase : i.price*0.85;
+    }
     return b + (i.price-cost)*i.qty;
   },0),0);
   const dueOutstanding = state.customers.reduce((a,c)=>a+c.due,0);
@@ -2468,6 +2496,7 @@ const LABEL_INFO_FIELDS = [
   {id:'business', label:'Business Name', checked:false, size:9},
   {id:'name', label:'Product Name', checked:true, size:11},
   {id:'variation', label:'Product Variation', checked:false, size:9},
+  {id:'barcodeText', label:'Barcode Text (SKU)', checked:true, size:14}, // নতুন ফিল্ড
   {id:'price', label:'Product Price', checked:true, size:10, hasTaxMode:true},
   {id:'packingDate', label:'Print Packing Date', checked:false, size:8},
   {id:'custom', label:'Custom Field', checked:false, size:8, hasText:true},
@@ -2491,10 +2520,14 @@ function renderLabelInfoFieldsUI(){
   box.dataset.built = '1';
   box.innerHTML = LABEL_INFO_FIELDS.map(f=>{
     const extra = f.hasTaxMode
-      ? `<select id="lf_${f.id}_tax" style="margin-left:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px"><option value="exc">Exc. Tax</option><option value="inc">Inc. Tax</option></select>`
+      ? `<select id="lf_${f.id}_tax" class="no-arrow" style="margin-left:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff"><option value="exc">Exc. Tax</option><option value="inc">Inc. Tax</option></select>`
       : (f.hasText ? `<input id="lf_${f.id}_text" placeholder="Text to print" style="margin-left:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;width:160px">` : '');
+
+    // barcodeText ফিল্ডটি ম্যান্ডেটরি, তাই চেকবক্স ডিসেবল করা হলো
+    const isDisabled = f.id === 'barcodeText' ? 'disabled' : '';
+
     return `<div class="row"><div class="rowleft" style="flex-wrap:wrap;gap:8px">
-      <input type="checkbox" id="lf_${f.id}_chk" ${f.checked?'checked':''} style="width:16px;height:16px">
+      <input type="checkbox" id="lf_${f.id}_chk" ${f.checked?'checked':''} ${isDisabled} style="width:16px;height:16px">
       <b>${f.label}</b>${extra}
     </div>
     <div style="display:flex;align-items:center;gap:6px"><small class="sub">Font Size</small><input id="lf_${f.id}_size" type="number" min="5" max="30" value="${f.size}" style="width:56px;padding:6px 8px;border:1px solid var(--line);border-radius:8px"></div>
@@ -2616,12 +2649,8 @@ function renderBarcodeLabelsAndPrint(items, sizeKey, opts, layout){
   .barcodeLabel{ width:100%; height:100%; }`;
   }
 
-  // Open a brand new tab (like Glorious POS's /labels/preview) so the main app stays untouched
-  const win = window.open('', '_blank');
-  if(!win){
-    showAlertDialog('Please allow pop-ups for this site so the label preview can open in a new tab.', {icon:'⚠️', title:'Pop-up Blocked'});
-    return;
-  }
+  // iframe ডকুমেন্ট তৈরি
+  const barcodeFontSize = opts.barcodeText ? opts.barcodeText.size : 14;
   const doc = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Print Labels</title>
 <style>
@@ -2639,15 +2668,35 @@ ${bodyHTML}
 <script>
 window.onload = function(){
   document.querySelectorAll('svg.bl-svg').forEach(function(svg){
-    try{ JsBarcode(svg, svg.getAttribute('data-sku'), {format:'CODE128', displayValue:true, fontSize:9, height:26, width:1.3, margin:2}); }catch(e){}
+    try{ JsBarcode(svg, svg.getAttribute('data-sku'), {format:'CODE128', displayValue:true, fontSize:${barcodeFontSize}, height:30, width:1.4, margin:3}); }catch(e){}
   });
   setTimeout(function(){ window.focus(); window.print(); }, 250);
 };
 <\/script>
 </body></html>`;
-  win.document.open();
-  win.document.write(doc);
-  win.document.close();
+  // Hidden iframe ব্যবহার করে প্রিন্ট (পপ-আপ ব্লক সমস্যা এড়াতে)
+  let iframe = document.getElementById('barcodePrintIframe');
+  if(!iframe){
+    iframe = document.createElement('iframe');
+    iframe.id = 'barcodePrintIframe';
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.left = '-9999px';
+    document.body.appendChild(iframe);
+  }
+  const idoc = iframe.contentWindow.document;
+  idoc.open();
+  idoc.write(doc);
+  idoc.close();
+
+  setTimeout(() => {
+    try{
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }catch(e){ console.warn('Print failed', e); }
+  }, 600);
 }
 function previewAndPrintLabels(){
   const items = Object.entries(labelSelection).map(([key,qty])=>{
@@ -2732,11 +2781,13 @@ function closeCameraScanner(){
 let scanBuffer = '';
 let scanTimer = null;
 document.addEventListener('keydown', function(e){
-  // শুধুমাত্র POS স্ক্রিনে কাজ করবে
   const posScreen = document.getElementById('pos');
-  if(!posScreen || !posScreen.classList.contains('active')) return;
+  const productsScreen = document.getElementById('products');
+  const posActive = posScreen && posScreen.classList.contains('active');
+  const productsActive = productsScreen && productsScreen.classList.contains('active');
 
-  // ইমেইল, পাসওয়ার্ড বা অন্য লেখার জায়গায় কাজ করবে না
+  if(!posActive && !productsActive) return;
+
   const tag = (e.target.tagName || '').toLowerCase();
   if(tag === 'textarea') return;
 
@@ -2746,19 +2797,26 @@ document.addEventListener('keydown', function(e){
       const code = scanBuffer;
       scanBuffer = '';
 
-      // স্ক্যানার যদি সরাসরি POS স্ক্রিনে (সার্চ বক্সে ফোকাস না রেখে) স্ক্যান করে
-      const p = getSellableItems().find(x=>(x.sku||'').toLowerCase() === code.toLowerCase());
-      if(p) {
-        addToCart(p.key);
-        // সার্চ বক্স খালি করাও জরুরি
-        const box = document.getElementById('search');
-        if(box) box.value = '';
+      if(posActive){
+        const p = getSellableItems().find(x=>(x.sku||'').toLowerCase() === code.toLowerCase());
+        if(p) {
+          addToCart(p.key);
+          const box = document.getElementById('search');
+          if(box) box.value = '';
+        }
+      } else if(productsActive){
+        const p = state.products.find(x=>x.sku && x.sku.toLowerCase() === code.toLowerCase());
+        if(p){
+          openEditProduct(p.id);
+        } else {
+          const searchBox = document.getElementById('productSearch');
+          if(searchBox){ searchBox.value = code; filterProductsTable(); }
+        }
       }
     }
     return;
   }
 
-  // সার্চ বক্স বা ইনপুট ফিল্ডে যদি স্ক্যান করা হয়, তাহলে handleScanEnter ফাংশনই কাজ করবে
   if(tag === 'input' || tag === 'select') return;
 
   if(e.key.length === 1){ scanBuffer += e.key; }
@@ -2973,16 +3031,40 @@ function holdCurrentOrder(){
   showAlertDialog('Order held successfully!', {icon:'📌', title:'Hold Success'});
 }
 function openHeldOrdersModal(){
-  if(!state.heldOrders.length) return showAlertDialog('No held orders.');
-  showPromptDialog('Select order to resume (Type index):\n' + state.heldOrders.map((o,i)=>`${i+1}. ${o.customer} - ${fmt(o.total)}`).join('\n'), '1', {
-    title:'Held Orders',
-    hint: 'Enter the number of the order you want to resume'
-  }).then(val => {
-    if(!val) return;
-    const idx = parseInt(val) - 1;
-    if(idx >= 0 && state.heldOrders[idx]) resumeHeldOrder(idx);
-    else showAlertDialog('Invalid selection.');
-  });
+  renderHeldOrdersList();
+  document.getElementById('heldOrdersModal').classList.add('show');
+}
+function closeHeldOrdersModal(){
+  document.getElementById('heldOrdersModal').classList.remove('show');
+}
+function renderHeldOrdersList(){
+  const box = document.getElementById('heldOrdersList');
+  if(!box) return;
+  const orders = state.heldOrders || [];
+  if(!orders.length){
+    box.innerHTML = '<div class="sub" style="padding:20px;text-align:center">No held orders right now.</div>';
+    return;
+  }
+  box.innerHTML = orders.map((o, i) => {
+    const itemCount = o.cart.reduce((a, c) => a + c.qty, 0);
+    return `
+      <div class="row" style="border-bottom:1px solid var(--line);padding:12px 0;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <b>${escapeHtml(o.customer || 'Walk-in Customer')}</b>
+          <div class="sub">${itemCount} items · Total: ${fmt(o.total)} · Held at ${new Date(o.heldAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="link" onclick="resumeHeldOrder(${i})">Resume</button>
+          <button class="link danger" onclick="deleteHeldOrder(${i})">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+function deleteHeldOrder(index){
+  state.heldOrders.splice(index, 1);
+  save();
+  renderHeldOrdersList();
 }
 function resumeHeldOrder(index){
   const order = state.heldOrders[index];
@@ -3005,8 +3087,9 @@ function doResumeHeldOrder(index){
   if(document.getElementById('vatPercent')) document.getElementById('vatPercent').value = order.vatPercent;
   state.heldOrders.splice(index, 1);
   save();
+  closeHeldOrdersModal();
   renderCart(); renderPOSGrid();
-  showAlertDialog('Order resumed!', {icon:'✅'});
+  showToast('Order resumed successfully!', 'success');
 }
 
 // ২. Stock Adjustment (manual +/- stock with a logged reason)
@@ -3200,7 +3283,14 @@ function renderComparisonChart(shops) {
     </div>
   `;
 
-  box.innerHTML += html;
+  // আগের তুলনা টেক্সট মুছে নতুন করে বসানো (ডুপ্লিকেট রোধ)
+  let cmp = document.getElementById('adminComparisonText');
+  if(!cmp){
+    cmp = document.createElement('div');
+    cmp.id = 'adminComparisonText';
+    box.appendChild(cmp);
+  }
+  cmp.innerHTML = html;
 }
 
 /* ================= BATCH 4 (added): Super Admin Direct Login (Impersonation) ================= */
@@ -3442,7 +3532,7 @@ function toggleExpenseDay(date) {
 function renderExpenseLedger(){
   const box = document.getElementById('expenseLedgerList');
   if(!box) return;
-  const selectedMonth = selectedExpenseDate ? expenseMonthKey(selectedExpenseDate) : new Date().toISOString().slice(0,7);
+  const selectedMonth = selectedExpenseDate ? expenseMonthKey(selectedExpenseDate) : toLocalISODate(new Date()).slice(0,7);
 
   const monthExpenses = state.cash.filter(c => c.type === 'out' && expenseMonthKey(c.date) === selectedMonth);
 
@@ -3980,4 +4070,111 @@ async function quickAddTax() {
     // ৪. Settings পেজের Tax Rates লিস্টও আপডেট করা
     renderTaxRatesList();
     showToast('Tax added successfully!', 'success');
+}
+
+/* ================= STOCK ADJUSTMENT HISTORY ================= */
+function openStockAdjustmentHistory(){
+  renderStockAdjustmentHistory();
+  document.getElementById("stockAdjustmentHistoryModal").classList.add("show");
+}
+function closeStockAdjustmentHistory(){
+  document.getElementById("stockAdjustmentHistoryModal").classList.remove("show");
+}
+function renderStockAdjustmentHistory(){
+  const body = document.getElementById("stockAdjustmentHistoryBody");
+  if(!body) return;
+  const list = (state.stockAdjustments || []).slice().reverse();
+  if(!list.length){
+    body.innerHTML = '<tr><td colspan="5" class="sub" style="text-align:center;padding:20px 0">No stock adjustments recorded yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = list.map(a => `
+    <tr>
+      <td>${escapeHtml(a.date)}</td>
+      <td>${escapeHtml(a.time)}</td>
+      <td>${escapeHtml(a.product)}</td>
+      <td class="${a.qty < 0 ? 'danger' : ""}">${a.qty > 0 ? "+" : ""}${a.qty}</td>
+      <td>${escapeHtml(a.reason || "-")}</td>
+    </tr>
+  `).join("");
+}
+
+/* ================= PREMIUM ISOLATED PRINT SYSTEM (Only Prints the Receipt) ================= */
+
+function printElement(elementId) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    // ১. শুধু রিসিটের HTML কনটেন্টটি কপি করা হচ্ছে
+    const elementHTML = element.outerHTML;
+
+    // ২. একটি হিডেন আইফ্রেম তৈরি করা হচ্ছে (এটি পপ-আপ ব্লক এড়ায়)
+    let iframe = document.getElementById('receiptPrintIframe');
+    if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'receiptPrintIframe';
+        iframe.style.position = 'absolute';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.style.left = '-9999px';
+        document.body.appendChild(iframe);
+    }
+
+    // ৩. আইফ্রেমের ভেতরে রিসিটের HTML এবং CSS বসানো হচ্ছে
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                * { box-sizing: border-box; }
+                body { 
+                    margin: 0; 
+                    padding: 0; 
+                    background: #fff; 
+                    font-family: Inter, Segoe UI, "Noto Sans Bengali", sans-serif; 
+                    font-size: 11px; 
+                    color: #000; 
+                    display: flex; 
+                    justify-content: center; 
+                }
+                .receipt { 
+                    width: 300px; 
+                    background: white; 
+                    color: #111; 
+                    padding: 10px; 
+                    font-family: "Courier New", monospace; 
+                }
+                .receipt h3 { text-align: center; margin: 4px 0; font-size: 17px; }
+                .receipt p { text-align: center; margin: 3px; }
+                .dash { border-top: 1px dashed #111; margin: 9px 0; }
+                .rline { display: flex; justify-content: space-between; margin: 5px 0; }
+                .rgrand { font-size: 14px; font-weight: bold; }
+                
+                /* প্রিন্ট সেটিংস: মার্জিন ছাড়া যাতে ঠিক এক পৃষ্ঠায় আসে */
+                @media print {
+                    @page { margin: 0; }
+                    body { margin: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            ${elementHTML}
+        </body>
+        </html>
+    `);
+    doc.close();
+
+    // ৪. ডেটা লোড হওয়ার পর প্রিন্ট উইন্ডো ওপেন করা
+    setTimeout(() => {
+        try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+        } catch (e) {
+            console.warn('Receipt print failed', e);
+        }
+    }, 500);
 }

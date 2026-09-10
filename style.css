@@ -550,3 +550,25 @@ body.dark .offer-time-btn {
 }
 body.dark .offer-time-item:hover { background: var(--green2); }
 body.dark .offer-time-item.selected { background: var(--gold); color: #111; }
+
+/* ================= FINAL FIXES: Held Orders + Adjustment History ================= */
+#heldOrdersList .row:last-child { border-bottom: none !important; }
+#heldOrdersList b { color: var(--ink); }
+#heldOrdersList .link { padding: 7px 14px; font-size: 11px; }
+
+#stockAdjustmentHistoryModal .table { min-width: 560px; }
+#stockAdjustmentHistoryModal .table tbody tr:hover { background: #f8f6f2; }
+body.dark #stockAdjustmentHistoryModal .table tbody tr:hover { background: #2e2e2e; }
+
+/* Dark mode for held orders */
+body.dark #heldOrdersList .row { border-color: var(--line); }
+
+/* Remove default dropdown arrow for specific selects */
+select.no-arrow {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: none !important;
+    padding-right: 8px !important;
+    cursor: pointer;
+}

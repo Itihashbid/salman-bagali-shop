@@ -6,7 +6,7 @@ import {
   reauthenticateWithCredential, EmailAuthProvider, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs
+  getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -60,18 +60,24 @@ window.Firebase = {
     const snap = await getDoc(stateDocFor(shopId));
     return snap.exists() ? snap.data().data : null;
   },
+  // ===== [সংশোধিত] এখন true/false রিটার্ন করে, যাতে script.js বুঝতে পারে সেভ সফল হলো কি না =====
   async saveState(shopId, stateObj){
-    if(!shopId) return;
+    if(!shopId) return false;
     try{
       const user = auth.currentUser;
-      await setDoc(stateDocFor(shopId), { 
-        data: stateObj, 
-        updatedAt: Date.now(),
-        ownerUid: user ? user.uid : null,
-        ownerEmail: user ? user.email : null
-      }, { merge: true });
+      const payload = {
+        data: stateObj,
+        updatedAt: Date.now()
+      };
+      if(user && user.uid === shopId){
+        payload.ownerUid = user.uid;
+        payload.ownerEmail = user.email;
+      }
+      await setDoc(stateDocFor(shopId), payload, { merge: true });
+      return true;
     }catch(e){
       console.warn('Firestore save failed', e);
+      return false;
     }
   },
   watchState(shopId, cb){
@@ -79,6 +85,22 @@ window.Firebase = {
     return onSnapshot(stateDocFor(shopId), (snap)=>{
       if(snap.exists()) cb(snap.data().data);
     });
+  },
+
+  // ===== [নতুন] Invoice নম্বর atomic ভাবে বাড়ানো =====
+  // একাধিক ডিভাইস/staff একই সময়ে বিক্রি করলেও Firestore transaction ব্যবহার করে
+  // নিশ্চিত করা হচ্ছে যে দুইজন কখনোই একই Invoice নম্বর পাবে না।
+  async getNextInvoiceNumber(shopId){
+    const ref = stateDocFor(shopId);
+    const assignedNumber = await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(ref);
+      const currentData = snap.exists() ? snap.data().data : null;
+      const current = (currentData && typeof currentData.invoiceCounter === 'number') ? currentData.invoiceCounter : 1;
+      // শুধু invoiceCounter ফিল্ডটাই আপডেট হবে, বাকি সব ডেটা (products, sales, ইত্যাদি) অক্ষত থাকবে (merge:true)
+      transaction.set(ref, { data: { invoiceCounter: current + 1 } }, { merge: true });
+      return current;
+    });
+    return assignedNumber;
   },
 
   // ===== স্টাফ ইনভাইট (মালিক স্টাফের ইমেইল দিয়ে আমন্ত্রণ পাঠায়, স্টাফ প্রথমবার লগইন করলে লিংক হয়ে যায়) =====
@@ -164,8 +186,21 @@ window.Firebase = {
     const snapshot = await getDocs(collection(db, "staffInvites"));
     return snapshot.size; // মোট ইনভাইট সংখ্যা
   },
+  // ===== [সংশোধিত] দোকান ডিলিট করলে এখন এর সাথে যুক্ত staffLinks ও staffInvites-ও মুছে যাবে =====
+  // (adminLogs ইচ্ছাকৃতভাবে রাখা হয়েছে — এটা audit trail হিসেবে থেকে যাওয়া উচিত)
   async deleteShop(shopId){
     try {
+      // ১. এই দোকানের সাথে যুক্ত সব staffLinks মুছে ফেলা (orphaned staff link প্রতিরোধ)
+      const staffQ = query(collection(db, "staffLinks"), where("ownerUid", "==", shopId));
+      const staffSnap = await getDocs(staffQ);
+      await Promise.all(staffSnap.docs.map(d => deleteDoc(d.ref)));
+
+      // ২. এই দোকানের pending staffInvites মুছে ফেলা
+      const inviteQ = query(collection(db, "staffInvites"), where("ownerUid", "==", shopId));
+      const inviteSnap = await getDocs(inviteQ);
+      await Promise.all(inviteSnap.docs.map(d => deleteDoc(d.ref)));
+
+      // ৩. দোকানের মূল ডেটা মুছে ফেলা
       await deleteDoc(doc(db, "posData", shopId));
       return true;
     } catch(e) {
