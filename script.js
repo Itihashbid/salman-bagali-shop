@@ -241,7 +241,7 @@ function emptyState(){
     purchaseReturns: [],
     sales: [],
     users: [{id:uid(), name:'Admin User', role:'Admin'}],
-    settings: {storeName:'My Shop', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'Thank you • Visit Again', storeCode:'ST0001', storeEmail:'info@myshop.com', website:'', taxId:'', showSignature:true, invoicePrefix:'INV-', defaultDiscount:0, currencySymbol:'৳', currencyPlacement:'before', termsConditions:'যেকোনো পণ্য ফেরত নেওয়ার সময় অবশ্যই রিসিট দেখাতে হবে।', showChange:true},
+    settings: {storeName:'SB POS SYSTEM', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'Thank you • Visit Again', storeCode:'ST0001', storeEmail:'info@myshop.com', website:'', taxId:'', showSignature:true, invoicePrefix:'INV-', defaultDiscount:0, currencySymbol:'৳', currencyPlacement:'before', termsConditions:'যেকোনো পণ্য ফেরত নেওয়ার সময় অবশ্যই রিসিট দেখাতে হবে।', showChange:true},
     paymentMethods: defaultPaymentMethods(),
     taxRates: defaultTaxRates(),
     heldOrders: [],
@@ -827,7 +827,7 @@ async function openReceipt(){
   }
   const rLogo = document.getElementById('receiptLogo');
   if(rLogo){ if(state.settings.logo){ rLogo.src = state.settings.logo; rLogo.style.display='block'; } else { rLogo.style.display='none'; } }
-  setText('receiptStoreName', state.settings.storeName || 'My Shop');
+  setText('receiptStoreName', state.settings.storeName || 'SB POS SYSTEM');
   setText('receiptAddress', state.settings.address || '');
   setText('receiptPhone', state.settings.phone || '');
   setText('receiptFooterNote', state.settings.footerNote || 'Thank you • Visit Again');
@@ -880,7 +880,7 @@ async function openReceipt(){
 
   // ===== Save this sale for the WhatsApp receipt button =====
   _lastSaleData = {
-    storeName: state.settings.storeName || 'My Shop',
+    storeName: state.settings.storeName || 'SB POS SYSTEM',
     invoice, date: todayStr(), time: nowTime(), customer,
     items: saleRecord.items,
     subtotal: t.subtotal, discount: t.discountAmt, vat: t.vatAmt,
@@ -1717,7 +1717,7 @@ function applyBranding(){
   const nameText = document.getElementById('brandNameText');
   const avatarBtn = document.getElementById('avatarBtn');
   if(logoImg){ if(s.logo){ logoImg.src = s.logo; logoImg.style.display = 'block'; } else { logoImg.style.display = 'none'; } }
-  if(nameText) nameText.textContent = s.storeName || 'My Shop';
+  if(nameText) nameText.textContent = s.storeName || 'SB POS SYSTEM';
   if(avatarBtn) avatarBtn.textContent = getShopInitials(s.storeName);
 }
 function saveSettings(){
@@ -1752,7 +1752,7 @@ function closeProfileMenu(){
 function livePreviewProfileName(){
   const nameEl = document.getElementById('profileDisplayName');
   const val = document.getElementById('profileStoreName').value;
-  if(nameEl) nameEl.textContent = val || 'My Shop';
+  if(nameEl) nameEl.textContent = val || 'SB POS SYSTEM';
 }
 async function confirmLogout(){
   const ok = await showConfirmDialog('Do you want to log out?', {icon:'🚪', title:'Logout', okLabel:'Yes, log out', cancelLabel:'No'});
@@ -1764,7 +1764,7 @@ function fillProfileForm(){
   const profEmail = document.getElementById('profileEmail');
   if(profEmail) profEmail.textContent = emailEl ? emailEl.textContent : '';
   const nameEl = document.getElementById('profileDisplayName');
-  if(nameEl) nameEl.textContent = s.storeName || 'My Shop';
+  if(nameEl) nameEl.textContent = s.storeName || 'SB POS SYSTEM';
   const map = {profileStoreName:'storeName', profileOwnerName:'ownerName', profilePhone:'phone', profileAddress:'address', profileFooterNote:'footerNote', profileReceiptSize:'receiptSize'};
   Object.keys(map).forEach(id=>{
     const el = document.getElementById(id);
@@ -2596,7 +2596,7 @@ function readLabelOptions(){
 }
 function buildLabelInnerHTML(p, opts){
   let html = '';
-  if(opts.business.checked) html += `<div style="font-size:${opts.business.size}px;font-weight:700">${escapeHtml(state.settings.storeName||'My Shop')}</div>`;
+  if(opts.business.checked) html += `<div style="font-size:${opts.business.size}px;font-weight:700">${escapeHtml(state.settings.storeName||'SB POS SYSTEM')}</div>`;
   if(opts.name.checked) html += `<div style="font-size:${opts.name.size}px;font-weight:700">${escapeHtml(p.name)}</div>`;
   if(opts.variation.checked && p.variationValue) html += `<div style="font-size:${opts.variation.size}px">${escapeHtml(p.variationValue)}</div>`;
   html += `<svg class="bl-svg" data-sku="${escapeHtml(p.sku)}"></svg>`;
@@ -3234,7 +3234,7 @@ function openDueReceipt(customerName, amount, balance) {
   const receipt = document.getElementById('dueReceiptContent');
   if(!receipt) return;
   receipt.innerHTML = `
-    <h3 style="text-align:center;margin:0 0 10px">${escapeHtml(state.settings.storeName || 'My Shop')}</h3>
+    <h3 style="text-align:center;margin:0 0 10px">${escapeHtml(state.settings.storeName || 'SB POS SYSTEM')}</h3>
     <p style="text-align:center;margin:2px 0">Due Collection Receipt</p>
     <div class="dash" style="border-top:1px dashed #111;margin:8px 0"></div>
     <div class="rline"><span>Date</span><span>${todayStr()} ${nowTime()}</span></div>
