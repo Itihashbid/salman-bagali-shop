@@ -2486,11 +2486,41 @@ function downloadProductTemplate(){
 
 /* ===== Barcode Print System (Ultimate POS style) — one label per page ===== */
 const LABEL_SIZES = {
-  'roll_32x25': {label:'Continuous Rolls - 31.75mm x 25.4mm (Default)', width:31.75, height:25.4},
-  'roll_38x25': {label:'Continuous Rolls - 38.1mm x 25.4mm', width:38.1, height:25.4},
-  'roll_51x25': {label:'Continuous Rolls - 50.8mm x 25.4mm', width:50.8, height:25.4},
-  'sticker_64x38': {label:'Stickers - 63.5mm x 38.1mm', width:63.5, height:38.1},
-  'sticker_76x51': {label:'Stickers - 76.2mm x 50.8mm', width:76.2, height:50.8},
+    '40x30': {label:'40mm x 30mm', width:40, height:30},
+    '40x50': {label:'40mm x 50mm', width:40, height:50},
+    '50x20': {label:'50mm x 20mm', width:50, height:20},
+    '50x25': {label:'50mm x 25mm', width:50, height:25},
+    '50x30': {label:'50mm x 30mm', width:50, height:30},
+    '60x40': {label:'60mm x 40mm', width:60, height:40},
+    '72x30': {label:'72mm x 30mm', width:72, height:30},
+    '72x50': {label:'72mm x 50mm', width:72, height:50},
+    '72x100': {label:'72mm x 100mm', width:72, height:100},
+    '72x150': {label:'72mm x 150mm', width:72, height:150},
+    '72x180': {label:'72mm x 180mm', width:72, height:180},
+    '76x130': {label:'76mm x 130mm', width:76, height:130},
+    '94x145': {label:'94mm x 145mm', width:94, height:145},
+    '94x150': {label:'94mm x 150mm', width:94, height:150},
+    '94x187': {label:'94mm x 187mm', width:94, height:187},
+    '94x190': {label:'94mm x 190mm', width:94, height:190},
+    '94x200': {label:'94mm x 200mm', width:94, height:200},
+    '94x210': {label:'94mm x 210mm', width:94, height:210},
+    '100x25': {label:'100mm x 25mm', width:100, height:25},
+    '100x100': {label:'100mm x 100mm', width:100, height:100},
+    '100x113': {label:'100mm x 113mm', width:100, height:113},
+    '100x145': {label:'100mm x 145mm', width:100, height:145},
+    '100x180': {label:'100mm x 180mm', width:100, height:180},
+    '100x190': {label:'100mm x 190mm', width:100, height:190},
+    '100x200': {label:'100mm x 200mm', width:100, height:200},
+    '100x210': {label:'100mm x 210mm', width:100, height:210},
+    '105x145': {label:'105mm x 145mm', width:105, height:145},
+    '105x150': {label:'105mm x 150mm', width:105, height:150},
+    '105x190': {label:'105mm x 190mm', width:105, height:190},
+    '105x200': {label:'105mm x 200mm', width:105, height:200},
+    '105x210': {label:'105mm x 210mm', width:105, height:210},
+    '194x87': {label:'194mm x 87mm', width:194, height:87},
+    '2x4': {label:'2in x 4in (50.8mm x 101.6mm)', width:50.8, height:101.6},
+    '4x4': {label:'4in x 4in (101.6mm x 101.6mm)', width:101.6, height:101.6},
+    '4x6': {label:'4in x 6in (101.6mm x 152.4mm)', width:101.6, height:152.4},
 };
 const LABEL_INFO_FIELDS = [
   {id:'business', label:'Business Name', checked:false, size:9},
@@ -2619,7 +2649,7 @@ function buildBarcodeLabelUnits(p, qty, opts){
   return units;
 }
 function renderBarcodeLabelsAndPrint(items, sizeKey, opts, layout){
-  const size = LABEL_SIZES[sizeKey] || LABEL_SIZES['roll_32x25'];
+  const size = LABEL_SIZES[sizeKey] || LABEL_SIZES['50x25'];
   layout = layout === 'a4' ? 'a4' : 'roll';
   const units = [];
   items.forEach(it=>{ units.push(...buildBarcodeLabelUnits(it.product, it.qty, opts)); });
@@ -2705,7 +2735,7 @@ function previewAndPrintLabels(){
   }).filter(Boolean);
   if(!items.length){ showAlertDialog('Select at least one product with a SKU/barcode.', {icon:'⚠️'}); return; }
   const opts = readLabelOptions();
-  const sizeKey = document.getElementById('labelSizeSelect')?.value || 'roll_32x25';
+  const sizeKey = document.getElementById('labelSizeSelect')?.value || '50x25';
   const layout = document.getElementById('labelLayoutSelect')?.value || 'roll';
   renderBarcodeLabelsAndPrint(items, sizeKey, opts, layout);
 }
@@ -4103,28 +4133,33 @@ function renderStockAdjustmentHistory(){
 
 function printElement(elementId) {
     const element = document.getElementById(elementId);
-    if (!element) return;
+    if (!element) {
+        showAlertDialog('প্রিন্ট করার জন্য কোনো রিসিট পাওয়া যায়নি!', {icon:'⚠️'});
+        return;
+    }
 
     // ১. শুধু রিসিটের HTML কনটেন্টটি কপি করা হচ্ছে
     const elementHTML = element.outerHTML;
 
-    // ২. একটি হিডেন আইফ্রেম তৈরি করা হচ্ছে (এটি পপ-আপ ব্লক এড়ায়)
+    // ২. একটি হিডেন আইফ্রেম তৈরি করা হচ্ছে (তবে সম্পূর্ণ invisible নয়, যাতে ব্রাউজার এটি রেন্ডার করে)
     let iframe = document.getElementById('receiptPrintIframe');
     if (!iframe) {
         iframe = document.createElement('iframe');
         iframe.id = 'receiptPrintIframe';
-        iframe.style.position = 'absolute';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = '0';
-        iframe.style.left = '-9999px';
+        // আইফ্রেমটিকে স্ক্রিনের বাইরে রাখা হচ্ছে, কিন্তু display:none বা width:0 করা হচ্ছে না
+        iframe.style.position = 'fixed';
+        iframe.style.top = '0';
+        iframe.style.left = '0';
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.opacity = '0';
+        iframe.style.pointerEvents = 'none';
+        iframe.style.zIndex = '-9999';
         document.body.appendChild(iframe);
     }
 
     // ৩. আইফ্রেমের ভেতরে রিসিটের HTML এবং CSS বসানো হচ্ছে
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(`
+    const docContent = `
         <!DOCTYPE html>
         <html>
         <head>
@@ -4165,16 +4200,21 @@ function printElement(elementId) {
             ${elementHTML}
         </body>
         </html>
-    `);
-    doc.close();
+    `;
 
-    // ৪. ডেটা লোড হওয়ার পর প্রিন্ট উইন্ডো ওপেন করা
-    setTimeout(() => {
-        try {
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print();
-        } catch (e) {
-            console.warn('Receipt print failed', e);
-        }
-    }, 500);
+    // ৪. document.write এর বদলে srcdoc ব্যবহার করা হচ্ছে (এটি অনেক বেশি নির্ভরযোগ্য)
+    iframe.srcdoc = docContent;
+
+    // ৫. আইফ্রেমের কনটেন্ট লোড হওয়ার পর প্রিন্ট কল করা হচ্ছে
+    iframe.onload = function() {
+        setTimeout(function() {
+            try {
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+            } catch (e) {
+                console.error('Receipt print failed:', e);
+                showAlertDialog('প্রিন্ট করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।', {icon:'❌'});
+            }
+        }, 200); // রেন্ডারিং সম্পূর্ণ হওয়ার জন্য ২০০ মিলিসেকেন্ড অপেক্ষা
+    };
 }
