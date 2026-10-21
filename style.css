@@ -17,6 +17,11 @@ main{margin-left:246px;width:calc(100% - 246px);padding:26px 30px 60px}.top{disp
   body.printing-labels #barcodePrintArea,body.printing-labels #barcodePrintArea *{visibility:visible}
   body.printing-labels #barcodePrintArea{display:block !important;position:absolute;top:0;left:0;width:100%;margin:0;padding:0}
 }
+#print-area{display:none}
+@media print{
+  body.printing-area > *:not(#print-area){display:none !important}
+  body.printing-area #print-area{display:block !important;position:static;width:100%;margin:0;padding:0;background:#fff}
+}
 .barcodeLabelPage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;page-break-after:always;break-after:page;box-sizing:border-box}
 .barcodeLabelPage:last-child{page-break-after:auto;break-after:auto}
 .barcodeLabel{width:100%;height:100%;padding:1.2mm;border:0.3mm dashed #999;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:#fff;box-sizing:border-box;overflow:hidden}
@@ -572,3 +577,14 @@ select.no-arrow {
     padding-right: 8px !important;
     cursor: pointer;
 }
+
+/* ===== [ফিক্স #20] Mobile "More" menu (bottom sheet) ===== */
+.mobile-more-sheet{display:none;position:fixed;inset:0;z-index:50}
+.mobile-more-sheet.show{display:block}
+.mobile-more-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.mobile-more-panel{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;padding:16px 14px calc(78px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 30px rgba(0,0,0,.25);max-height:75vh;overflow:auto}
+.mobile-more-title{font-weight:800;font-size:14px;margin-bottom:12px;color:var(--text,inherit)}
+.mobile-more-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.mobile-more-grid button{padding:13px 10px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:inherit;font-size:13px;font-weight:600;text-align:left;cursor:pointer}
+.mobile-more-grid button:active{background:var(--green);color:#fff}
+@media(min-width:951px){.mobile-more-sheet{display:none!important}}

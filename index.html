@@ -8,7 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.12.3/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script type="module" src="firebase-init.js"></script>
+<script type="module" src="firebase.js"></script>
 </head>
 <body>
 <div class="modal show" id="loginModal" style="z-index:50">
@@ -82,7 +82,7 @@
  </nav>
 </aside>
 <main>
-<header class="top"><div><h1 id="pageTitle">Good Evening 👋</h1><p id="currentDateHeader">SB POS SYSTEM · Friday, 28 August 2026</p></div><div class="user"><button class="btn soft" onclick="toggleDarkMode()" title="Dark Mode" style="margin-right:10px">🌙</button><button class="btn soft" onclick="exitImpersonation()" style="display:none; margin-right:10px;" id="adminBackBtn">← Exit Shop View</button><span class="sub" id="loggedInEmail" style="display:none">Admin</span><button class="avatar" id="avatarBtn" onclick="toggleProfileMenu()" style="border:0;cursor:pointer;font:inherit;padding:0">SC</button></div></header>
+<header class="top"><div><h1 id="pageTitle">WELCOME</h1><p id="currentDateHeader">SB POS SYSTEM · Friday, 28 August 2026</p></div><div class="user"><button class="btn soft" onclick="toggleDarkMode()" title="Dark Mode" style="margin-right:10px">🌙</button><button class="btn soft" onclick="exitImpersonation()" style="display:none; margin-right:10px;" id="adminBackBtn">← Exit Shop View</button><span class="sub" id="loggedInEmail" style="display:none">Admin</span><button class="avatar" id="avatarBtn" onclick="toggleProfileMenu()" style="border:0;cursor:pointer;font:inherit;padding:0">SC</button></div></header>
 
 <section id="dashboard" class="screen active">
  <div class="cards">
@@ -155,7 +155,9 @@
      <option value="roll">Thermal Roll Printer (one label = one page)</option>
      <option value="a4">A4 Sheet (grid of labels per page)</option>
    </select></div>
-   <div class="field"><label>Label Size</label><select id="labelSizeSelect"></select></div>
+   <div class="field"><label>Label Size</label><select id="labelSizeSelect" onchange="labelSizeChanged()"></select></div>
+   <div class="field" id="labelCustomWidthWrap" style="display:none"><label>Custom Width (mm)</label><input type="number" id="labelCustomWidth" min="20" max="210" step="0.5" placeholder="e.g. 50"></div>
+   <div class="field" id="labelCustomHeightWrap" style="display:none"><label>Custom Height (mm)</label><input type="number" id="labelCustomHeight" min="15" max="297" step="0.5" placeholder="e.g. 25"></div>
   </div>
  </div>
 </section>
@@ -328,21 +330,22 @@
     </div>
 
     <div class="toolbar">
-      <input class="search" id="adminSearch" oninput="renderAdminPanel()" placeholder="🔍 Search by Shop Name or Owner Email...">
+      <input class="search" id="adminSearch" oninput="onAdminFilterChange()" placeholder="🔍 Search by Shop Name or Owner Email...">
       
       <!-- নতুন ফিল্টার ড্রপডাউন -->
-      <select id="adminPlanFilter" onchange="renderAdminPanel()" style="padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff">
+      <select id="adminPlanFilter" onchange="onAdminFilterChange()" style="padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff">
         <option value="">All Plans</option>
         <option value="Free">Free</option>
         <option value="Premium">Premium</option>
       </select>
       
-      <select id="adminPaymentFilter" onchange="renderAdminPanel()" style="padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff">
+      <select id="adminPaymentFilter" onchange="onAdminFilterChange()" style="padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff">
         <option value="">All Payments</option>
         <option value="Paid">Paid</option>
         <option value="Due">Due</option>
       </select>
 
+      <button class="btn soft" onclick="refreshAdminPanel()">🔄 Refresh</button>
       <button class="btn soft" onclick="exportAdminCSV()">📥 Export CSV</button>
     </div>
 
@@ -526,8 +529,19 @@
 </div></div>
 
 <div id="barcodePrintArea"></div>
+<div id="print-area"></div>
 
-<div class="mobile"><button class="active" data-screen="dashboard" onclick="show('dashboard')">⌂<br>Home</button><button data-screen="pos" onclick="show('pos')">＋<br>Sale</button><button data-screen="products" onclick="show('products')">▣<br>Stock</button><button data-screen="customers" onclick="show('customers')">♙<br>Customer</button><button data-screen="ledger" onclick="show('ledger')">৳<br>Due</button></div>
+<div class="modal" id="planModal"><div class="receiptWrap" style="width:400px;max-width:92vw">
+ <h2 style="margin:0 0 4px">Edit Plan</h2>
+ <p class="sub" id="planShopName" style="margin:0 0 12px"></p>
+ <input type="hidden" id="planShopId">
+ <div class="field"><label>Plan</label><select id="planType"><option value="Free">Free</option><option value="Premium">Premium</option></select></div>
+ <div class="field"><label>Expiry Date (খালি = No Expiry)</label><input type="date" id="planExpiry"></div>
+ <div class="field"><label>Payment</label><select id="planPayment"><option value="Paid">Paid</option><option value="Due">Due</option></select></div>
+ <div class="modalBtns"><button class="btn soft" onclick="closePlanModal()">Cancel</button><button class="btn" onclick="savePlanModal()">Save</button></div>
+</div></div>
+
+<div class="mobile"><button class="active" data-screen="dashboard" onclick="show('dashboard')">⌂<br>Home</button><button data-screen="pos" onclick="show('pos')">＋<br>Sale</button><button data-screen="products" onclick="show('products')">▣<br>Stock</button><button data-screen="customers" onclick="show('customers')">♙<br>Customer</button><button data-screen="ledger" onclick="show('ledger')">৳<br>Due</button><button onclick="toggleMobileMore()">☰<br>More</button></div>
 
 <div class="modal" id="dueReceiptModal">
   <div class="receiptWrap" style="width:300px">
@@ -539,7 +553,7 @@
   </div>
 </div>
 
-<script src="script.js" defer></script>
+<script src="app.js" defer></script>
 <div class="modal" id="expenseModal">
  <div class="receiptWrap" style="width:400px;max-width:92vw">
   <h2 style="margin:0 0 14px;font-size:17px" id="expenseModalTitle">Add New Expense</h2>
