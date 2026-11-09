@@ -853,8 +853,8 @@ async function openReceipt(){
   if(payBtn) payBtn.disabled = true; // ডাবল-ক্লিকে ডাবল-সেল হওয়া প্রতিরোধ
   let invoiceNumber;
   try{
-    invoiceNumber = await window.Firebase.getNextInvoiceNumber(currentShopId);
-    state.invoiceCounter = invoiceNumber + 1;
+    // [স্পিড ফিক্স] নম্বর আগে থেকেই রিজার্ভ করা থাকে (pool) — তাই সাধারণত নেটওয়ার্কের জন্য অপেক্ষা করতে হয় না
+    invoiceNumber = await takeInvoiceNumber();
   }catch(e){
     console.error('Invoice number generation failed', e);
     if(payBtn) payBtn.disabled = false;
@@ -976,16 +976,72 @@ async function openReceipt(){
   playSuccessBeep();
   showToast('✅ Sale Completed & Receipt Generated!');
 
+  const soldKeys = cart.map(c=>c.id);
   cart = [];
   renderCart();
   resetPOSExtras();
-  renderPOSGrid();
-  renderPOSCustomers();
-  renderProductsTable();
-  renderCustomersTable();
-  renderLedgerTable();
-  renderCashTable();
-  renderDashboard();
+  // [স্পিড ফিক্স] রিসিট আগে স্ক্রিনে আসবে; ভারী টেবিল/ড্যাশবোর্ড রিফ্রেশ তার পরে, ব্যাকগ্রাউন্ডে
+  requestAnimationFrame(()=>setTimeout(()=>{
+    updatePOSGridStock(soldKeys);
+    renderPOSCustomers();
+    renderProductsTable();
+    renderCustomersTable();
+    renderLedgerTable();
+    renderCashTable();
+    renderDashboard();
+  }, 0));
+}
+// শুধু বিক্রি হওয়া পণ্যগুলোর Stock লেখা আপডেট — পুরো grid নতুন করে বানানো হয় না
+function updatePOSGridStock(keys){
+  const grid = document.getElementById('productGrid');
+  if(!grid || !grid.children.length){ renderPOSGrid(); return; }
+  const byId = new Map();
+  grid.querySelectorAll('.product').forEach(b=>byId.set(b.getAttribute('data-id'), b));
+  keys.forEach(k=>{
+    const it = findSellable(k), btn = byId.get(k);
+    if(!it || !btn){ return; }
+    const small = btn.querySelector('small');
+    if(small) small.textContent = fmt(it.sell) + ' · Stock ' + it.stock;
+  });
+}
+
+/* ===================== [স্পিড ফিক্স] INVOICE NUMBER POOL ===================== */
+// একসাথে ৩টা নম্বর রিজার্ভ করে রাখা হয়; পুল প্রায় খালি হলে ব্যাকগ্রাউন্ডে আবার ভরা হয়।
+// নম্বরগুলো Firestore transaction দিয়ে রিজার্ভ হয়, তাই দুই ডিভাইসে কখনো একই নম্বর আসবে না।
+// (পেজ রিলোড করলে পুলের অব্যবহৃত ১-২টা নম্বর বাদ যেতে পারে — ইনভয়েসে ছোট gap হবে, কিন্তু duplicate হবে না)
+let _invoicePool = [];
+let _invoicePoolShop = null;
+let _invoiceRefilling = null;
+const INVOICE_BLOCK = 3;
+function refillInvoicePool(){
+  if(_invoiceRefilling) return _invoiceRefilling;
+  const shop = currentShopId;
+  if(!shop || !window.Firebase) return Promise.resolve();
+  _invoiceRefilling = (async ()=>{
+    let start, count = INVOICE_BLOCK;
+    try{
+      start = await window.Firebase.reserveInvoiceNumbers(shop, count, state.invoiceCounter || 1);
+    }catch(e){
+      if(e && e.code === 'permission-denied'){
+        // posCounters-এর Firestore rule এখনো যোগ করা হয়নি → পুরনো (ধীর কিন্তু নিরাপদ) পদ্ধতি
+        console.warn('posCounters rule missing — falling back to slow invoice counter');
+        start = await window.Firebase.getNextInvoiceNumber(shop); count = 1;
+      } else { throw e; }
+    }
+    if(shop !== currentShopId) return;       // এর মধ্যে দোকান বদলে গেছে — এই নম্বরগুলো ব্যবহার হবে না
+    if(_invoicePoolShop !== shop){ _invoicePool = []; _invoicePoolShop = shop; }
+    for(let i=0;i<count;i++) _invoicePool.push(start+i);
+    state.invoiceCounter = Math.max(state.invoiceCounter || 1, start + count);
+  })().catch(e=>{ console.warn('Invoice pool refill failed', e); }).finally(()=>{ _invoiceRefilling = null; });
+  return _invoiceRefilling;
+}
+async function takeInvoiceNumber(){
+  if(_invoicePoolShop !== currentShopId){ _invoicePool = []; _invoicePoolShop = currentShopId; }
+  if(!_invoicePool.length) await refillInvoicePool();   // পুল খালি থাকলে একবার অপেক্ষা করতেই হবে
+  if(!_invoicePool.length) throw new Error('No invoice number available');
+  const n = _invoicePool.shift();
+  if(_invoicePool.length <= 1) refillInvoicePool();     // পরের বিক্রির জন্য ব্যাকগ্রাউন্ডে আগে থেকে নিয়ে রাখা
+  return n;
 }
 function closeReceipt(){ document.getElementById('receiptModal').classList.remove('show'); }
 
@@ -1165,16 +1221,63 @@ function filterProductsTable(){
 let _editingProductId = null;
 let _variationRowSeq = 0;
 let _pfImageData = ''; // base64 photo for the product currently being added/edited
+// [সাইজ ফিক্স] ছবি ছোট (প্রায় ১০-২০KB) করে সেভ হয়। আগে ১.৫MB পর্যন্ত আসল ছবি ডেটাবেসে ঢুকতো —
+// একটা ছবিতেই Firestore-এর ১MB সীমা পার হয়ে যেত।
+function compressDataUrl(dataUrl, maxSide, quality){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const sc = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * sc));
+      c.height = Math.max(1, Math.round(img.height * sc));
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+function compressImageFile(file, maxSide, quality){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=> compressDataUrl(r.result, maxSide, quality).then(resolve, reject);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+async function optimizeStoredImages(){
+  if(isImpersonating || currentRole !== 'Admin' || !state) return;
+  let n = 0;
+  for(const p of state.products){
+    if(p.image && p.image.length > 40000){
+      try{
+        const small = await compressDataUrl(p.image, 200, 0.72);
+        if(small.length < p.image.length){ p.image = small; n++; }
+      }catch(e){}
+    }
+  }
+  if(state.settings && state.settings.logo && state.settings.logo.length > 60000){
+    try{
+      const small = await compressDataUrl(state.settings.logo, 300, 0.8);
+      if(small.length < state.settings.logo.length){ state.settings.logo = small; n++; }
+    }catch(e){}
+  }
+  if(n){
+    save(); renderProductsTable(); renderPOSGrid(); applyBranding();
+    showToast('🗜️ ' + n + 'টি বড় ছবি ছোট করা হয়েছে — ডেটা সাইজ কমেছে।', 'success');
+  }
+}
 function handleProductImageUpload(e){
   const file = e.target.files && e.target.files[0];
   if(!file) return;
-  if(file.size > 1.5*1024*1024){ showAlertDialog('Image size must be under 1.5MB. Please choose a smaller photo.', {icon:'⚠️'}); e.target.value=''; return; }
-  const reader = new FileReader();
-  reader.onload = function(ev){
-    _pfImageData = ev.target.result;
+  if(file.size > 10*1024*1024){ showAlertDialog('Image size must be under 10MB. Please choose a smaller photo.', {icon:'⚠️'}); e.target.value=''; return; }
+  compressImageFile(file, 200, 0.72).then(data=>{
+    _pfImageData = data;
     setProductImagePreview(_pfImageData);
-  };
-  reader.readAsDataURL(file);
+  }).catch(()=>{ showAlertDialog('ছবিটি পড়া যায়নি। অন্য একটি ছবি দিন।', {icon:'⚠️'}); e.target.value=''; });
 }
 function removeProductImage(){
   _pfImageData = '';
@@ -2109,16 +2212,14 @@ function fillProfileForm(){
 function handleProfileLogoUpload(e){
   const file = e.target.files && e.target.files[0];
   if(!file) return;
-  if(file.size > 1024*1024){ showAlertDialog('Image size must be under 1MB. Please choose a smaller image.', {icon:'⚠️'}); e.target.value=''; return; }
-  const reader = new FileReader();
-  reader.onload = function(ev){
-    state.settings.logo = ev.target.result;
+  if(file.size > 10*1024*1024){ showAlertDialog('Image size must be under 10MB. Please choose a smaller image.', {icon:'⚠️'}); e.target.value=''; return; }
+  compressImageFile(file, 300, 0.8).then(data=>{
+    state.settings.logo = data;
     save();
     fillProfileForm();
     fillSettingsForm();
     applyBranding();
-  };
-  reader.readAsDataURL(file);
+  }).catch(()=>{ showAlertDialog('ছবিটি পড়া যায়নি। অন্য একটি ছবি দিন।', {icon:'⚠️'}); e.target.value=''; });
 }
 function removeProfileLogo(){
   state.settings.logo = '';
@@ -2774,6 +2875,8 @@ async function initAfterAuth(user){
       await window.Firebase.saveState(currentShopId, state);
     }
     renderAll();
+    refillInvoicePool();                       // [স্পিড ফিক্স] প্রথম বিক্রির আগেই Invoice নম্বর রেডি
+    setTimeout(optimizeStoredImages, 4000);    // বড় ছবি থাকলে একবার ছোট করে ডেটা সাইজ কমানো
     if(unsubscribeState) unsubscribeState();
     unsubscribeState = window.Firebase.watchState(currentShopId, function(remoteState){
       isRemoteUpdate = true;

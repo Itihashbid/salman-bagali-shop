@@ -246,6 +246,21 @@ window.Firebase = {
     return assignedNumber;
   },
 
+  // ===== [স্পিড ফিক্স] Invoice নম্বর রিজার্ভ — ছোট আলাদা ডকুমেন্টে (posCounters/{shopId}) =====
+  // আগে প্রতি বিক্রিতে পুরো দোকানের ডেটা-ডকুমেন্ট (প্রায় ১MB) transaction-এ পড়া হতো — সেটাই ৪-৫ সেকেন্ড লাগাতো।
+  // এখন counter আলাদা ছোট ডকুমেন্টে থাকে (কয়েক বাইট) এবং একসাথে count-টা নম্বর রিজার্ভ করা যায়।
+  // রিটার্ন: রিজার্ভ হওয়া প্রথম নম্বর (start..start+count-1 এই ডিভাইসের)
+  async reserveInvoiceNumbers(shopId, count, seed){
+    const ref = doc(db, "posCounters", shopId);
+    return await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(ref);
+      const cur = (snap.exists() && typeof snap.data().invoiceCounter === 'number') ? snap.data().invoiceCounter : 0;
+      const start = Math.max(cur, seed || 1);
+      transaction.set(ref, { invoiceCounter: start + count }, { merge: true });
+      return start;
+    });
+  },
+
   // ===== [ফিক্স #11] Purchase invoice নম্বরও atomic counter দিয়ে (P-0001, P-0002 ...) =====
   async getNextPurchaseNumber(shopId){
     const ref = stateDocFor(shopId);
