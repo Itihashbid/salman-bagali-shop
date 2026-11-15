@@ -163,18 +163,20 @@ const PERMISSION_SCREENS = [
   {key:'expense',      label:'Expense Ledger'},
   {key:'purchases',    label:'Purchases'},
   {key:'returns',      label:'Sales Return'},
+  {key:'history',      label:'Sales History'},
   {key:'reports',      label:'Reports'},
   {key:'settings',     label:'Settings'},
 ];
 const ROLE_DEFAULT_PERMISSIONS = {
-  Manager:     ['dashboard','pos','products','barcodePrint','customers','ledger','cash','expense','purchases','returns','reports'],
+  Manager:     ['dashboard','pos','products','barcodePrint','customers','ledger','cash','expense','purchases','returns','history','reports'],
   Cashier:     ['dashboard','pos','customers','ledger'],
   Salesman:    ['dashboard','pos','customers'],
-  Accountant:  ['dashboard','ledger','cash','expense','purchases','reports'],
+  Accountant:  ['dashboard','ledger','cash','expense','purchases','history','reports'],
   DeliveryMan: ['dashboard','customers','ledger'],
 };
 
 /* ===================== PAYMENT METHODS ===================== */
+let _payAuto = true; // true = POS auto-fills the full bill as Cash until the cashier edits payment manually
 let PAYMENT_METHODS = [
   {key:'cash',  label:'Cash',  icon:'💵', inputId:'payCash'},
   {key:'bkash', label:'bKash', icon:'📱', inputId:'payBkash'},
@@ -215,10 +217,8 @@ function syncPaymentMethods(){
 
 /* ===================== PRODUCT PHOTO / ICON HELPER ===================== */
 function productIconHTML(p, size){
+  // Product images are removed from the system — only a small emoji/category icon is shown.
   size = size || 32;
-  if(p && p.image){
-    return `<img src="${p.image}" alt="" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:${Math.round(size*0.28)}px;flex:none;vertical-align:middle">`;
-  }
   return `<span style="font-size:${Math.round(size*0.62)}px;line-height:1;vertical-align:middle">${(p && p.emoji) || '📦'}</span>`;
 }
 
@@ -285,7 +285,7 @@ function emptyState(){
     purchaseReturns: [],
     sales: [],
     users: [],
-    settings: {storeName:'SB POS SYSTEM', phone:'', address:'', receiptSize:'80mm Thermal', vatPercent:0, logo:'', ownerName:'', footerNote:'Thank you • Visit Again', storeCode:'ST0001', storeEmail:'info@myshop.com', website:'', taxId:'', showSignature:true, invoicePrefix:'INV-', defaultDiscount:0, currencySymbol:'৳', currencyPlacement:'before', termsConditions:'যেকোনো পণ্য ফেরত নেওয়ার সময় অবশ্যই রিসিট দেখাতে হবে।', showChange:true},
+    settings: {storeName:'SB POS SYSTEM', phone:'', address:'', receiptSize:'80mm Thermal', receiptFontSize:13, vatPercent:0, logo:'', ownerName:'', footerNote:'Thank you • Visit Again', storeCode:'ST0001', storeEmail:'info@myshop.com', website:'', taxId:'', showSignature:true, invoicePrefix:'INV-', defaultDiscount:0, currencySymbol:'৳', currencyPlacement:'before', termsConditions:'যেকোনো পণ্য ফেরত নেওয়ার সময় অবশ্যই রিসিট দেখাতে হবে।', showChange:true},
     paymentMethods: defaultPaymentMethods(),
     taxRates: defaultTaxRates(),
     _hydratedTaxRates: true,
@@ -350,7 +350,7 @@ function show(id, el){
       if(b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${id}'`)) b.classList.add('active');
     });
   }
-  const titles = {dashboard:'Dashboard', pos:'New Sale · POS Billing', products:'Products & Inventory', barcodePrint:'Barcode Print', customers:'Customers', ledger:'Due / Customer Ledger', cash:'Daily Cash Flow', expense:'Expense Ledger', purchases:'Purchases / Stock In', returns:'Sales Return / Exchange', reports:'Reports', settings:'Settings'};
+  const titles = {dashboard:'Dashboard', pos:'New Sale · POS Billing', products:'Products & Inventory', barcodePrint:'Barcode Print', customers:'Customers', ledger:'Due / Customer Ledger', cash:'Daily Cash Flow', expense:'Expense Ledger', purchases:'Purchases / Stock In', returns:'Sales Return / Exchange', history:'Sales History', reports:'Reports', settings:'Settings'};
   document.getElementById('pageTitle').textContent = titles[id] || id;
   if(id==='dashboard') renderDashboard();
   if(id==='pos') {
@@ -365,6 +365,7 @@ function show(id, el){
   if(id==='settings'){ renderUsersList(); renderPaymentMethodsList(); renderTaxRatesList(); renderOffersList(); }
   if(id==='admin') renderAdminPanel();
   if(id==='expense') renderExpenseLedger();
+  if(id==='history') renderSalesHistory(true);
   window.scrollTo(0,0);
 }
 function resetPOSExtras(){
@@ -374,11 +375,22 @@ function resetPOSExtras(){
   if(dv) dv.value = state.settings.defaultDiscount || 0;
   if(dt) dt.value = 'amount';
   if(vp) vp.value = state.settings.vatPercent || 0;
+  _payAuto = true;
   PAYMENT_METHODS.forEach(m=>{
     const el = document.getElementById(m.inputId);
     if(el) el.value = 0;
   });
   renderCart();
+}
+// ক্যাশিয়ার নিজে কোনো পেমেন্ট ঘরে লিখলে অটো Full Cash বন্ধ হয়
+function payInputChanged(){ _payAuto = false; renderCart(); }
+function applyAutoFullPayment(total){
+  if(!_payAuto || !PAYMENT_METHODS.length) return;
+  const primary = PAYMENT_METHODS.find(m=>m.key==='cash') || PAYMENT_METHODS[0];
+  PAYMENT_METHODS.forEach(m=>{
+    const el = document.getElementById(m.inputId);
+    if(el) el.value = (m.key === primary.key && cart.length && total > 0) ? (Math.round(total*100)/100) : 0;
+  });
 }
 
 /* ===================== PAYMENT METHODS MANAGEMENT ===================== */
@@ -432,11 +444,11 @@ async function openAddPaymentMethod(){
 async function deletePaymentMethod(id){
   const method = (state.paymentMethods||[]).find(m=>m.id === id);
   if(!method) return;
-  if(method.builtin){
-    showAlertDialog('Built-in payment methods cannot be deleted — you can disable them instead.');
+  if((state.paymentMethods||[]).length <= 1){
+    showAlertDialog('At least one payment method must remain.', {icon:'⚠️'});
     return;
   }
-  const ok = await showConfirmDialog(`Delete "${method.label}"?`, {danger:true, title:'Delete Payment Method'});
+  const ok = await showConfirmDialog(`Delete "${method.label}"?${method.builtin ? ' (built-in method — you can add it again later with Add Method)' : ''} Old sales keep their records.`, {danger:true, title:'Delete Payment Method'});
   if(!ok) return;
   state.paymentMethods = state.paymentMethods.filter(m=>m.id !== id);
   save();
@@ -725,7 +737,6 @@ function addToCart(key){
       price: finalPrice, // এই দামটাই কার্টে অটো বসবে
       qty: 1,
       emoji: p.emoji,
-      image: p.image,
       disc: 0, // ম্যানুয়াল পার-আইটেম ডিসকাউন্টের জন্য (আলাদা ফিচার)
       basePrice: basePrice, // আসল দাম রাখা হল যাতে রিসিটে প্রমাণ থাকে
       discApplied: basePrice - finalPrice,
@@ -770,6 +781,7 @@ function renderCart(){
     box.innerHTML = cart.map((x,i)=>`<div class="cartline"><div><b>${productIconHTML(x,16)} ${escapeHtml(x.name)}</b><div class="sub">${fmt(x.price)} × ${x.qty}</div>${x.discApplied > 0 ? `<div class="sub" style="color:var(--gold)">Auto Discount: -${fmt(x.discApplied)}</div>` : ''}${x.disc > 0 ? `<div class="sub" style="color:var(--red)">Discount: -${fmt(x.disc)}</div>` : ''}<div class="item-disc-btn" onclick="addDiscountToCart(${i})">${x.disc > 0 ? 'Edit Disc' : '+ Add Disc'}</div></div><div class="qty"><button onclick="changeQty(${i},-1)">−</button><b>${x.qty}</b><button onclick="changeQty(${i},1)">+</button></div><b>${fmt(x.price*x.qty - (x.disc||0))}</b></div>`).join('');
   }
   const t = computeTotals();
+  applyAutoFullPayment(t.total);
   setText('subtotal', fmt(t.subtotal));
   setText('discountShow', '− ' + fmt(t.discountAmt));
   setText('vatPercentShow', t.vatPercent);
@@ -784,6 +796,7 @@ function renderCart(){
   }
 }
 function quickPay(mode){
+  _payAuto = false;
   const t = computeTotals();
   PAYMENT_METHODS.forEach(m=>{
     const el = document.getElementById(m.inputId);
@@ -878,7 +891,7 @@ async function openReceipt(){
     invoice, customer, time: nowTime(), date: todayStr(),
     items: cart.map(c=>({id:c.id, name:c.name, price:c.price, qty:c.qty, cost:c.cost||0, disc:c.disc||0})), // [সংশোধিত] disc-ও সেভ করা হলো
     subtotal: t.subtotal, discount: t.discountAmt, vatPercent: t.vatPercent, vat: t.vatAmt,
-    total: t.total, paid: {...recorded}, paidCash: recorded.cash, paidBkash: recorded.bkash, due: p.due, payment: paymentLabel
+    total: t.total, paid: {...recorded}, paidCash: recorded.cash||0, paidBkash: recorded.bkash||0, due: p.due, payment: paymentLabel
   };
   state.sales.push(saleRecord);
 
@@ -955,6 +968,7 @@ async function openReceipt(){
       changeEl.style.display = 'none';
     }
   }
+  applyReceiptStyle();
   document.getElementById('receiptModal').classList.add('show');
 
   // ===== Loyalty points: 1 point per ৳100 spent, for registered customers =====
@@ -1118,7 +1132,7 @@ function getSellableItems(){
       p.variations.forEach(v=>{
         list.push({
           key: p.id+'::'+v.id, refId:p.id, variationId:v.id,
-          name: p.name, variationValue:v.value, emoji:p.emoji, image:p.image,
+          name: p.name, variationValue:v.value, emoji:p.emoji,
           sku:v.sku||'', purchase:+v.purchase||0, sell:+v.sell||0, stock:+v.stock||0,
           category:p.category||'', brand:p.brand||'', unit:p.unit||'',
           autoDiscountType: p.autoDiscountType || 'none', autoDiscountValue: +p.autoDiscountValue || 0
@@ -1127,7 +1141,7 @@ function getSellableItems(){
     } else {
       list.push({
         key: p.id, refId:p.id, variationId:null,
-        name: p.name, variationValue:'', emoji:p.emoji, image:p.image,
+        name: p.name, variationValue:'', emoji:p.emoji,
         sku:p.sku||'', purchase:+p.purchase||0, sell:+p.sell||0, stock:+p.stock||0,
         category:p.category||'', brand:p.brand||'', unit:p.unit||'',
         autoDiscountType: p.autoDiscountType || 'none', autoDiscountValue: +p.autoDiscountValue || 0
@@ -1138,7 +1152,7 @@ function getSellableItems(){
 }
 // [ফিক্স #21] একটা পণ্য খুঁজতে এখন পুরো লিস্ট rebuild হয় না — সরাসরি ঐ পণ্যটাই বের করে আনা হয়
 function _sellableFrom(p, v){
-  const common = { refId:p.id, emoji:p.emoji, image:p.image, category:p.category||'', brand:p.brand||'', unit:p.unit||'',
+  const common = { refId:p.id, emoji:p.emoji, category:p.category||'', brand:p.brand||'', unit:p.unit||'',
     autoDiscountType: p.autoDiscountType || 'none', autoDiscountValue: +p.autoDiscountValue || 0 };
   if(v){
     return Object.assign({ key: p.id+'::'+v.id, variationId:v.id, name:p.name, variationValue:v.value,
@@ -1220,7 +1234,6 @@ function filterProductsTable(){
 }
 let _editingProductId = null;
 let _variationRowSeq = 0;
-let _pfImageData = ''; // base64 photo for the product currently being added/edited
 // [সাইজ ফিক্স] ছবি ছোট (প্রায় ১০-২০KB) করে সেভ হয়। আগে ১.৫MB পর্যন্ত আসল ছবি ডেটাবেসে ঢুকতো —
 // একটা ছবিতেই Firestore-এর ১MB সীমা পার হয়ে যেত।
 function compressDataUrl(dataUrl, maxSide, quality){
@@ -1249,55 +1262,17 @@ function compressImageFile(file, maxSide, quality){
   });
 }
 async function optimizeStoredImages(){
+  // Only the shop logo is optimised now (product images no longer exist).
   if(isImpersonating || currentRole !== 'Admin' || !state) return;
-  let n = 0;
-  for(const p of state.products){
-    if(p.image && p.image.length > 40000){
-      try{
-        const small = await compressDataUrl(p.image, 200, 0.72);
-        if(small.length < p.image.length){ p.image = small; n++; }
-      }catch(e){}
-    }
-  }
   if(state.settings && state.settings.logo && state.settings.logo.length > 60000){
     try{
       const small = await compressDataUrl(state.settings.logo, 300, 0.8);
-      if(small.length < state.settings.logo.length){ state.settings.logo = small; n++; }
+      if(small.length < state.settings.logo.length){
+        state.settings.logo = small;
+        save(); applyBranding();
+        showToast('🗜️ Shop logo optimised — data size reduced.', 'success');
+      }
     }catch(e){}
-  }
-  if(n){
-    save(); renderProductsTable(); renderPOSGrid(); applyBranding();
-    showToast('🗜️ ' + n + 'টি বড় ছবি ছোট করা হয়েছে — ডেটা সাইজ কমেছে।', 'success');
-  }
-}
-function handleProductImageUpload(e){
-  const file = e.target.files && e.target.files[0];
-  if(!file) return;
-  if(file.size > 10*1024*1024){ showAlertDialog('Image size must be under 10MB. Please choose a smaller photo.', {icon:'⚠️'}); e.target.value=''; return; }
-  compressImageFile(file, 200, 0.72).then(data=>{
-    _pfImageData = data;
-    setProductImagePreview(_pfImageData);
-  }).catch(()=>{ showAlertDialog('ছবিটি পড়া যায়নি। অন্য একটি ছবি দিন।', {icon:'⚠️'}); e.target.value=''; });
-}
-function removeProductImage(){
-  _pfImageData = '';
-  setProductImagePreview('');
-  const input = document.getElementById('pf_imageInput');
-  if(input) input.value = '';
-}
-function setProductImagePreview(dataUrl){
-  const img = document.getElementById('pf_imagePreview');
-  const placeholder = document.getElementById('pf_imagePlaceholder');
-  const removeBtn = document.getElementById('pf_imageRemoveBtn');
-  if(!img) return;
-  if(dataUrl){
-    img.src = dataUrl; img.style.display = 'block';
-    if(placeholder) placeholder.style.display = 'none';
-    if(removeBtn) removeBtn.style.display = 'inline';
-  } else {
-    img.style.display = 'none';
-    if(placeholder) placeholder.style.display = 'block';
-    if(removeBtn) removeBtn.style.display = 'none';
   }
 }
 function fillMetaSelect(selectId, listName, selectedValue){
@@ -1346,8 +1321,6 @@ function openAddProduct(){
   ensureMetaLists();
   _editingProductId = null;
   document.getElementById('productFormTitle').textContent = 'Add New Product';
-  _pfImageData = '';
-  setProductImagePreview('');
   document.getElementById('pf_name').value = '';
   document.getElementById('pf_sku').value = '';
   document.getElementById('pf_purchase').value = 0;
@@ -1372,8 +1345,6 @@ function openEditProduct(id){
   ensureMetaLists();
   _editingProductId = id;
   document.getElementById('productFormTitle').textContent = 'Edit Product';
-  _pfImageData = p.image || '';
-  setProductImagePreview(_pfImageData);
   document.getElementById('pf_name').value = p.name;
   document.getElementById('pf_sku').value = p.sku || '';
   document.getElementById('pf_purchase').value = p.purchase || 0;
@@ -1413,7 +1384,7 @@ function saveProductForm(){
   const category = document.getElementById('pf_category').value;
   const brand = document.getElementById('pf_brand').value;
   const unit = document.getElementById('pf_unit').value;
-  let payload = {emoji:'📦', image:_pfImageData || '', name, category, brand, unit, productType:type, lowStockAlert: Math.max(0, +document.getElementById('pf_lowStockAlert').value || 0), taxId: document.getElementById('pf_tax') ? document.getElementById('pf_tax').value : '',
+  let payload = {emoji:'📦', name, category, brand, unit, productType:type, lowStockAlert: Math.max(0, +document.getElementById('pf_lowStockAlert').value || 0), taxId: document.getElementById('pf_tax') ? document.getElementById('pf_tax').value : '',
     // অটো ডিসকাউন্ট
     autoDiscountType: document.getElementById('pf_autoDiscType') ? document.getElementById('pf_autoDiscType').value : 'none',
     autoDiscountValue: document.getElementById('pf_autoDiscValue') ? parseFloat(document.getElementById('pf_autoDiscValue').value) || 0 : 0
@@ -1436,6 +1407,7 @@ function saveProductForm(){
   if(_editingProductId){
     const p = state.products.find(x=>x.id===_editingProductId);
     Object.assign(p, payload);
+    delete p.image; // product images are no longer supported
     newId = p.id;
   } else {
     newId = uid();
@@ -1484,6 +1456,23 @@ function openAddCustomer(){
     if(!v.name.trim()){ showAlertDialog('Please enter the name.'); return false; }
     state.customers.push({id:uid(), name:v.name, mobile:v.mobile||'-', address:v.address||'', totalPurchase:0, due:0, lastPurchase:'-'});
     save(); renderCustomersTable(); renderPOSCustomers(); renderDashboard();
+  });
+}
+// POS থেকেই জরুরি নতুন কাস্টমার যোগ — সেভ হলে সাথে সাথে সিলেক্ট হয়ে যায়
+function openAddCustomerFromPOS(){
+  openFormModal('Add New Customer', [
+    {id:'name', label:'Customer Name', value:''},
+    {id:'mobile', label:'Phone Number', value:''},
+    {id:'address', label:'Customer Address', value:''},
+  ], (v)=>{
+    const name = (v.name||'').trim();
+    if(!name){ showAlertDialog('Please enter the name.'); return false; }
+    if(state.customers.some(c=>c.name.toLowerCase()===name.toLowerCase())){ showAlertDialog('A customer with this name already exists.', {icon:'⚠️'}); return false; }
+    state.customers.push({id:uid(), name, mobile:v.mobile||'-', address:v.address||'', totalPurchase:0, due:0, lastPurchase:'-'});
+    save(); renderCustomersTable(); renderPOSCustomers(); renderDashboard();
+    const sel = document.getElementById('posCustomer');
+    if(sel) sel.value = name;
+    showToast('✅ Customer added: ' + name);
   });
 }
 function openEditCustomer(id){
@@ -2059,7 +2048,7 @@ function exportSalesCSV(){
 /* ===================== SETTINGS ===================== */
 function fillSettingsForm(){
   const s = state.settings;
-  const map = {settingStoreName:'storeName', settingPhone:'phone', settingAddress:'address', settingReceiptSize:'receiptSize', settingVatPercent:'vatPercent', settingOwnerName:'ownerName', settingFooterNote:'footerNote', settingStoreCode:'storeCode', settingStoreEmail:'storeEmail', settingWebsite:'website', settingTaxId:'taxId', settingInvoicePrefix:'invoicePrefix', settingDefaultDiscount:'defaultDiscount', settingTermsConditions:'termsConditions'};
+  const map = {settingStoreName:'storeName', settingPhone:'phone', settingAddress:'address', settingReceiptSize:'receiptSize', settingReceiptFontSize:'receiptFontSize', settingVatPercent:'vatPercent', settingOwnerName:'ownerName', settingFooterNote:'footerNote', settingStoreCode:'storeCode', settingStoreEmail:'storeEmail', settingWebsite:'website', settingTaxId:'taxId', settingInvoicePrefix:'invoicePrefix', settingDefaultDiscount:'defaultDiscount', settingTermsConditions:'termsConditions'};
   Object.keys(map).forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.value = s[map[id]] !== undefined ? s[map[id]] : (id==='settingVatPercent' || id==='settingDefaultDiscount' ? 0 : '');
@@ -2132,6 +2121,7 @@ function getShopInitials(name){
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 function applyBranding(){
+  applyReceiptStyle();
   const s = state.settings;
   const logoImg = document.getElementById('brandLogoImg');
   const nameText = document.getElementById('brandNameText');
@@ -2146,6 +2136,7 @@ function saveSettings(){
   state.settings.phone = document.getElementById('settingPhone').value;
   state.settings.address = document.getElementById('settingAddress').value;
   state.settings.receiptSize = document.getElementById('settingReceiptSize').value;
+  state.settings.receiptFontSize = clampReceiptFont(document.getElementById('settingReceiptFontSize').value);
   state.settings.vatPercent = +document.getElementById('settingVatPercent').value || 0;
   state.settings.ownerName = document.getElementById('settingOwnerName').value;
   state.settings.footerNote = document.getElementById('settingFooterNote').value;
@@ -2189,7 +2180,7 @@ function fillProfileForm(){
   // [ফিক্স #18] সাবটাইটেল: মালিকের নাম · স্টোর কোড (যা আছে সেটুকু)
   const subEl = document.getElementById('profileStoreSubtitle');
   if(subEl) subEl.textContent = [s.ownerName, s.storeCode].filter(Boolean).join(' · ');
-  const map = {profileStoreName:'storeName', profileOwnerName:'ownerName', profilePhone:'phone', profileAddress:'address', profileFooterNote:'footerNote', profileReceiptSize:'receiptSize'};
+  const map = {profileStoreName:'storeName', profileOwnerName:'ownerName', profilePhone:'phone', profileAddress:'address', profileFooterNote:'footerNote', profileReceiptSize:'receiptSize', profileReceiptFontSize:'receiptFontSize'};
   Object.keys(map).forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.value = s[map[id]] !== undefined ? s[map[id]] : '';
@@ -2235,6 +2226,7 @@ function saveProfileSettings(){
   state.settings.address = document.getElementById('profileAddress').value;
   state.settings.footerNote = document.getElementById('profileFooterNote').value;
   state.settings.receiptSize = document.getElementById('profileReceiptSize').value;
+  state.settings.receiptFontSize = clampReceiptFont(document.getElementById('profileReceiptFontSize').value);
   save();
   fillSettingsForm();
   applyBranding();
@@ -2514,15 +2506,18 @@ async function renderAdminPanel(opts){
 
     // Step 3: Calls the chart rendering function with the filtered shops
     renderAdminCharts(shops);
-    if(!useCache){
-      renderAdminInvites(); // নতুন লাইন
-      renderAdminLogs();    // নতুন লাইন
-      renderAdminNotifications(); // ধাপ ৫: নোটিফিকেশন লোড করা
+    const lu = document.getElementById('adminLastUpdated');
+    if(lu && !useCache) lu.textContent = 'Last refreshed: ' + new Date().toLocaleTimeString();
+    if(!useCache && !(opts && opts.shopsOnly)){
+      renderAdminInvites();
+      renderAdminLogs();
+      renderAdminNotifications();
     }
 
   } catch(e) {
     console.error(e);
-    tbody.innerHTML = '<tr><td colspan="11" class="danger">Error loading data.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="danger">Error loading data. Press Refresh to try again.</td></tr>';
+    if(opts && opts.rethrow) throw e;
   }
 }
 
@@ -2540,7 +2535,7 @@ async function loadAdminShopsWithStaff(){
 // [ফিক্স #4.3] Refresh বাটন — cache মুছে নতুন করে লোড
 function refreshAdminPanel(){
   _adminShopsRaw = null;
-  renderAdminPanel();
+  return renderAdminPanel({rethrow:true, shopsOnly:true});
 }
 // [ফিক্স #4.2] Plan / Expiry / Payment edit
 function openEditPlan(shopId){
@@ -2736,7 +2731,7 @@ function renderPaymentFields(){
   if(grid){
     grid.innerHTML = PAYMENT_METHODS.map((m,i)=>{
       const isLastOdd = (PAYMENT_METHODS.length % 2 === 1 && i === PAYMENT_METHODS.length-1);
-      return `<input type="number" id="${m.inputId}" min="0" value="0" oninput="renderCart()" placeholder="${m.icon} ${m.label} ৳"${isLastOdd ? ' style="grid-column:1/-1"' : ''}>`;
+      return `<input type="number" id="${m.inputId}" min="0" value="0" oninput="payInputChanged()" placeholder="${m.icon} ${m.label} ৳"${isLastOdd ? ' style="grid-column:1/-1"' : ''}>`;
     }).join('');
   }
   const qp = document.getElementById('quickPayGrid');
@@ -2807,6 +2802,7 @@ async function doLogout(){
     ]);
   }catch(e){ console.warn('Logout log failed', e); }
   if(unsubscribeState){ unsubscribeState(); unsubscribeState = null; }
+  stopAdminNotifWatcher();
   currentUid = null;
   currentShopId = null;
   currentRole = 'Admin';
@@ -2827,6 +2823,11 @@ function applyPermissions(){
       btn.style.display = effective.includes(id) ? '' : 'none';
     }
   });
+
+  const isSuper = (currentUid === SUPER_ADMIN_UID);
+  const bell = document.getElementById('adminBellBtn');
+  if(bell) bell.style.display = isSuper ? '' : 'none';
+  if(isSuper) startAdminNotifWatcher(); else stopAdminNotifWatcher();
 
   const addUserBtn = document.getElementById('addUserBtn');
   if(addUserBtn) addUserBtn.style.display = currentRole==='Admin' ? '' : 'none';
@@ -2876,7 +2877,8 @@ async function initAfterAuth(user){
     }
     renderAll();
     refillInvoicePool();                       // [স্পিড ফিক্স] প্রথম বিক্রির আগেই Invoice নম্বর রেডি
-    setTimeout(optimizeStoredImages, 4000);    // বড় ছবি থাকলে একবার ছোট করে ডেটা সাইজ কমানো
+    setTimeout(optimizeStoredImages, 4000);
+    setTimeout(promptImageMigration, 3500);   // পুরনো প্রোডাক্ট ছবি থাকলে ব্যাকআপসহ সরানোর অফার    // বড় ছবি থাকলে একবার ছোট করে ডেটা সাইজ কমানো
     if(unsubscribeState) unsubscribeState();
     unsubscribeState = window.Firebase.watchState(currentShopId, function(remoteState){
       isRemoteUpdate = true;
@@ -3007,71 +3009,137 @@ const LABEL_SIZES = {
 };
 const LABEL_DEFAULT_SIZE_KEY = '50x25';
 const LABEL_INFO_FIELDS = [
-  {id:'business', label:'Business Name', checked:false, size:9},
   {id:'name', label:'Product Name', checked:true, size:11},
-  {id:'variation', label:'Product Variation', checked:false, size:9},
-  {id:'barcodeText', label:'Barcode Text (SKU)', checked:true, size:14}, // নতুন ফিল্ড
-  {id:'price', label:'Product Price', checked:true, size:10, hasTaxMode:true},
-  {id:'packingDate', label:'Print Packing Date', checked:false, size:8},
-  {id:'custom', label:'Custom Field', checked:false, size:8, hasText:true},
-  {id:'vatText', label:'Show VAT Text', checked:false, size:7},
-  {id:'customLabel', label:'Print Custom Label', checked:false, size:8, hasText:true},
-  {id:'lot', label:'Print Lot Number', checked:false, size:7},
+  {id:'sku', label:'SKU (below barcode)', checked:true, size:10},
+  {id:'mrp', label:'MRP (price tag)', checked:true, size:11},
 ];
 let labelSelection = {}; // productId -> qty (in-memory only, resets per session)
 
+function getLabelPrefs(){ return (state && state.settings && state.settings.labelPrefs) || {}; }
+function getSavedLabelSizes(){ return (state && state.settings && Array.isArray(state.settings.labelSizes)) ? state.settings.labelSizes : []; }
+function _sizeKeyFor(w,h){ return 'c' + String(w).replace('.','_') + 'x' + String(h).replace('.','_'); }
+
 function renderBarcodePrintScreen(){
+  const prefs = getLabelPrefs();
   renderLabelInfoFieldsUI();
   const sizeSel = document.getElementById('labelSizeSelect');
-  if(sizeSel && !sizeSel.options.length){
+  if(sizeSel){
     sizeSel.innerHTML = Object.entries(LABEL_SIZES).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')
+      + getSavedLabelSizes().map(z=>`<option value="${escapeHtml(z.key)}">${z.width}mm x ${z.height}mm (Saved)</option>`).join('')
       + '<option value="custom">Custom Size...</option>';
-    sizeSel.value = LABEL_DEFAULT_SIZE_KEY;
+    const want = prefs.sizeKey;
+    const exists = want && Array.from(sizeSel.options).some(o=>o.value===want);
+    sizeSel.value = exists ? want : LABEL_DEFAULT_SIZE_KEY;
   }
-  labelSizeChanged();
+  const lay = document.getElementById('labelLayoutSelect');
+  if(lay && prefs.layout) lay.value = prefs.layout;
+  const cw = document.getElementById('labelCustomWidth'), ch = document.getElementById('labelCustomHeight');
+  if(cw && prefs.customW) cw.value = prefs.customW;
+  if(ch && prefs.customH) ch.value = prefs.customH;
+  labelSizeChanged(false);
   renderLabelProductsTable();
+  updateLabelSelCount();
 }
-// [ফিক্স #1.5] Custom সিলেক্ট করলে Width/Height ইনপুট দেখাবে, অন্য সাইজে লুকাবে
-function labelSizeChanged(){
-  const isCustom = (document.getElementById('labelSizeSelect')||{}).value === 'custom';
+function updateLabelSelCount(){
+  const el = document.getElementById('labelSelCount');
+  if(!el) return;
+  const n = Object.keys(labelSelection).length;
+  el.textContent = n; el.style.display = n ? '' : 'none';
+}
+// Custom সিলেক্ট করলে Width/Height ইনপুট দেখাবে; Saved সাইজ সিলেক্ট করলে Delete বাটন দেখাবে
+function labelSizeChanged(persist){
+  const key = (document.getElementById('labelSizeSelect')||{}).value;
+  const isCustom = key === 'custom';
+  const isSaved = getSavedLabelSizes().some(z=>z.key===key);
   ['labelCustomWidthWrap','labelCustomHeightWrap'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.style.display = isCustom ? '' : 'none';
   });
+  const wrap = document.getElementById('labelSizeActionsWrap');
+  if(wrap) wrap.style.display = (isCustom || isSaved) ? '' : 'none';
+  const sb = document.getElementById('labelSaveSizeBtn'); if(sb) sb.style.display = isCustom ? '' : 'none';
+  const db = document.getElementById('labelDeleteSizeBtn'); if(db) db.style.display = isSaved ? '' : 'none';
+  if(persist) saveLabelPrefs();
 }
-// সাইজ অবজেক্ট ঠিক করা: preset হলে LABEL_SIZES থেকে, Custom হলে ইনপুট যাচাই করে। ভুল হলে null
-function resolveLabelSize(){
-  const key = document.getElementById('labelSizeSelect')?.value || LABEL_DEFAULT_SIZE_KEY;
-  if(key !== 'custom') return LABEL_SIZES[key] || LABEL_SIZES[LABEL_DEFAULT_SIZE_KEY];
+function _readCustomSize(){
   const w = parseFloat(document.getElementById('labelCustomWidth')?.value);
   const h = parseFloat(document.getElementById('labelCustomHeight')?.value);
   const ok = isFinite(w) && isFinite(h) && w >= 20 && w <= 210 && h >= 15 && h <= 297;
-  if(!ok){
-    showAlertDialog('Custom সাইজ সঠিক নয়। Width ২০–২১০ mm এবং Height ১৫–২৯৭ mm এর মধ্যে দিন। সাইজ আবার 50×25mm (Default) করে দেওয়া হলো।', {icon:'⚠️', title:'Invalid Size'});
-    const sel = document.getElementById('labelSizeSelect');
-    if(sel) sel.value = LABEL_DEFAULT_SIZE_KEY;
-    labelSizeChanged();
-    return null;
+  return ok ? {w, h} : null;
+}
+// Custom সাইজ একবার সেভ করলে পরে লিস্ট থেকে সরাসরি সিলেক্ট করা যায় (Firestore-এ সেভ হয়)
+function saveCustomLabelSize(silent){
+  const c = _readCustomSize();
+  if(!c){ showAlertDialog('Width 20–210 mm এবং Height 15–297 mm এর মধ্যে দিন।', {icon:'⚠️', title:'Invalid Size'}); return null; }
+  if(isImpersonating) return null;
+  const key = _sizeKeyFor(c.w, c.h);
+  if(!Array.isArray(state.settings.labelSizes)) state.settings.labelSizes = [];
+  if(!state.settings.labelSizes.some(z=>z.key===key)) state.settings.labelSizes.push({key, width:c.w, height:c.h});
+  state.settings.labelPrefs = Object.assign({}, state.settings.labelPrefs, {sizeKey:key});
+  save();
+  renderBarcodePrintScreen();
+  if(!silent) showToast('✅ Size saved: ' + c.w + ' x ' + c.h + ' mm');
+  return key;
+}
+async function deleteSavedLabelSize(){
+  const key = document.getElementById('labelSizeSelect')?.value;
+  const z = getSavedLabelSizes().find(x=>x.key===key);
+  if(!z) return;
+  const ok = await showConfirmDialog(`Delete saved size ${z.width} x ${z.height} mm?`, {danger:true, title:'Delete Size'});
+  if(!ok) return;
+  state.settings.labelSizes = state.settings.labelSizes.filter(x=>x.key!==key);
+  state.settings.labelPrefs = Object.assign({}, state.settings.labelPrefs, {sizeKey:LABEL_DEFAULT_SIZE_KEY});
+  save();
+  renderBarcodePrintScreen();
+}
+function saveLabelPrefs(){
+  if(isImpersonating || !state || !state.settings) return;
+  const fields = {};
+  LABEL_INFO_FIELDS.forEach(f=>{
+    fields[f.id] = {
+      checked: !!document.getElementById(`lf_${f.id}_chk`)?.checked,
+      size: Math.min(30, Math.max(5, parseInt(document.getElementById(`lf_${f.id}_size`)?.value) || f.size))
+    };
+  });
+  const prefs = {
+    layout: document.getElementById('labelLayoutSelect')?.value || 'roll',
+    sizeKey: document.getElementById('labelSizeSelect')?.value || LABEL_DEFAULT_SIZE_KEY,
+    customW: document.getElementById('labelCustomWidth')?.value || '',
+    customH: document.getElementById('labelCustomHeight')?.value || '',
+    fields
+  };
+  if(JSON.stringify(prefs) === JSON.stringify(state.settings.labelPrefs || {})) return;
+  state.settings.labelPrefs = prefs;
+  save();
+}
+// সাইজ অবজেক্ট ঠিক করা: preset / saved / custom। ভুল হলে null
+function resolveLabelSize(){
+  const key = document.getElementById('labelSizeSelect')?.value || LABEL_DEFAULT_SIZE_KEY;
+  if(LABEL_SIZES[key]) return LABEL_SIZES[key];
+  const saved = getSavedLabelSizes().find(z=>z.key===key);
+  if(saved) return {label: saved.width + 'mm x ' + saved.height + 'mm', width: saved.width, height: saved.height};
+  if(key === 'custom'){
+    const c = _readCustomSize();
+    if(!c){
+      showAlertDialog('Custom সাইজ সঠিক নয়। Width ২০–২১০ mm এবং Height ১৫–২৯৭ mm এর মধ্যে দিন।', {icon:'⚠️', title:'Invalid Size'});
+      return null;
+    }
+    saveCustomLabelSize(true); // ব্যবহার করা Custom সাইজ নিজে থেকেই সেভ হয়ে যায়
+    return {label: c.w + 'mm x ' + c.h + 'mm', width: c.w, height: c.h};
   }
-  return {label: w + 'mm x ' + h + 'mm (Custom)', width: w, height: h};
+  return LABEL_SIZES[LABEL_DEFAULT_SIZE_KEY];
 }
 function renderLabelInfoFieldsUI(){
   const box = document.getElementById('labelInfoFieldsRows');
-  if(!box || box.dataset.built) return;
-  box.dataset.built = '1';
+  if(!box) return;
+  const pf = getLabelPrefs().fields || {};
   box.innerHTML = LABEL_INFO_FIELDS.map(f=>{
-    const extra = f.hasTaxMode
-      ? `<select id="lf_${f.id}_tax" class="no-arrow" style="margin-left:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff"><option value="exc">Exc. Tax</option><option value="inc">Inc. Tax</option></select>`
-      : (f.hasText ? `<input id="lf_${f.id}_text" placeholder="Text to print" style="margin-left:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;width:160px">` : '');
-
-    // [ফিক্স #5.1] Barcode Text (SKU) এখন toggle করা যায়
-    const isDisabled = '';
-
-    return `<div class="row"><div class="rowleft" style="flex-wrap:wrap;gap:8px">
-      <input type="checkbox" id="lf_${f.id}_chk" ${f.checked?'checked':''} ${isDisabled} style="width:16px;height:16px">
-      <b>${f.label}</b>${extra}
-    </div>
-    <div style="display:flex;align-items:center;gap:6px"><small class="sub">Font Size</small><input id="lf_${f.id}_size" type="number" min="5" max="30" value="${f.size}" style="width:56px;padding:6px 8px;border:1px solid var(--line);border-radius:8px"></div>
+    const p = pf[f.id] || {};
+    const checked = p.checked !== undefined ? p.checked : f.checked;
+    const size = p.size || f.size;
+    return `<div class="lf-item">
+      <label class="lf-check"><input type="checkbox" id="lf_${f.id}_chk" ${checked?'checked':''} onchange="saveLabelPrefs()"><b>${f.label}</b></label>
+      <div class="lf-size"><small class="sub">Font Size</small><input id="lf_${f.id}_size" type="number" min="5" max="30" value="${size}" onchange="saveLabelPrefs()"></div>
     </div>`;
   }).join('');
 }
@@ -3107,6 +3175,7 @@ function toggleLabelProduct(key, isChecked){
   } else {
     delete labelSelection[key];
   }
+  updateLabelSelCount();
 }
 function setLabelQty(key, val){
   const qty = Math.max(1, Math.min(1000, parseInt(val)||1));
@@ -3119,35 +3188,32 @@ function toggleAllLabelProducts(select){
     labelSelection = {};
   }
   renderLabelProductsTable();
+  updateLabelSelCount();
 }
 function readLabelOptions(){
   const opts = {};
   LABEL_INFO_FIELDS.forEach(f=>{
     opts[f.id] = {
       checked: !!document.getElementById(`lf_${f.id}_chk`)?.checked,
-      size: parseInt(document.getElementById(`lf_${f.id}_size`)?.value) || f.size,
-      text: f.hasText ? (document.getElementById(`lf_${f.id}_text`)?.value || '') : '',
-      taxMode: f.hasTaxMode ? (document.getElementById(`lf_${f.id}_tax`)?.value || 'exc') : '',
+      size: Math.min(30, Math.max(5, parseInt(document.getElementById(`lf_${f.id}_size`)?.value) || f.size)),
     };
   });
   return opts;
 }
+/* ---- Scan-friendly Code128 ----
+   Problem before: the barcode was an SVG squeezed by CSS (max-width/max-height) so bar widths became random
+   fractions of a printer dot, the quiet zone was ~1 mm, the SKU text sat inside the SVG and a dashed border was
+   printed next to the bars. Now: the bar width is calculated in real millimetres (a multiple of the 203-dpi dot,
+   0.125 mm), a proper 10-module quiet zone is kept, bars are tall, text is outside the SVG, no border. */
+const LABEL_PX_MM = 0.2646;   // 1 CSS px in mm
+const LABEL_DOT_MM = 0.125;   // 1 dot of a 203 dpi thermal printer
+function _labelDisplayName(p){ return p.variationValue ? `${p.name} (${p.variationValue})` : p.name; }
 function buildLabelInnerHTML(p, opts){
   let html = '';
-  if(opts.business.checked) html += `<div style="font-size:${opts.business.size}px;font-weight:700">${escapeHtml(state.settings.storeName||'SB POS SYSTEM')}</div>`;
-  if(opts.name.checked) html += `<div style="font-size:${opts.name.size}px;font-weight:700">${escapeHtml(p.name)}</div>`;
-  if(opts.variation.checked && p.variationValue) html += `<div style="font-size:${opts.variation.size}px">${escapeHtml(p.variationValue)}</div>`;
+  if(opts.name.checked) html += `<div class="bl-line bl-name2" style="font-size:${opts.name.size}px">${escapeHtml(_labelDisplayName(p))}</div>`;
   html += `<svg class="bl-svg" data-sku="${escapeHtml(p.sku)}"></svg>`;
-  if(opts.price.checked){
-    let priceVal = p.sell;
-    if(opts.price.taxMode==='inc') priceVal = p.sell * (1 + (state.settings.vatPercent||0)/100);
-    html += `<div style="font-size:${opts.price.size}px;font-weight:800">${fmt(priceVal)}</div>`;
-  }
-  if(opts.lot.checked && p.lotNumber) html += `<div style="font-size:${opts.lot.size}px">Lot: ${escapeHtml(p.lotNumber)}</div>`;
-  if(opts.packingDate.checked) html += `<div style="font-size:${opts.packingDate.size}px">${todayStr()}</div>`;
-  if(opts.custom.checked && opts.custom.text) html += `<div style="font-size:${opts.custom.size}px">${escapeHtml(opts.custom.text)}</div>`;
-  if(opts.customLabel.checked && opts.customLabel.text) html += `<div style="font-size:${opts.customLabel.size}px">${escapeHtml(opts.customLabel.text)}</div>`;
-  if(opts.vatText.checked) html += `<div style="font-size:${opts.vatText.size}px">Incl. VAT</div>`;
+  if(opts.sku.checked) html += `<div class="bl-line bl-sku" style="font-size:${opts.sku.size}px">${escapeHtml(p.sku)}</div>`;
+  if(opts.mrp.checked) html += `<div class="bl-line bl-mrp" style="font-size:${opts.mrp.size}px">MRP: ${fmt(p.sell)}</div>`;
   return html;
 }
 function buildBarcodeLabelUnits(p, qty, opts){
@@ -3156,8 +3222,19 @@ function buildBarcodeLabelUnits(p, qty, opts){
   for(let i=0;i<qty;i++) units.push(`<div class="barcodeLabel">${inner}</div>`);
   return units;
 }
+// bar height (mm) = space left after the text lines
+function _labelBarHeight(labelH, opts, availW, sampleName){
+  const lineMm = px => px * LABEL_PX_MM * 1.2;
+  let used = 1.6; // padding
+  if(opts.name.checked){
+    const lines = Math.min(2, Math.max(1, Math.ceil((sampleName||'').length * opts.name.size * LABEL_PX_MM * 0.55 / availW)));
+    used += lineMm(opts.name.size) * lines + 0.4;
+  }
+  if(opts.sku.checked) used += lineMm(opts.sku.size) + 0.3;
+  if(opts.mrp.checked) used += lineMm(opts.mrp.size) + 0.3;
+  return Math.max(7, Math.min(20, labelH - used));
+}
 function renderBarcodeLabelsAndPrint(items, size, opts, layout){
-  // [ফিক্স #1.2] iframe/CDN/setTimeout বাদ — মূল পেজে লোড করা JsBarcode দিয়ে এখনই (synchronously) রেন্ডার করে সরাসরি প্রিন্ট।
   // এই ফাংশন অবশ্যই বাটন-ক্লিকের ভেতর থেকে সরাসরি ডাকতে হবে (কোনো await/setTimeout-এর পরে নয়)
   if(typeof JsBarcode === 'undefined'){
     showAlertDialog('বারকোড লাইব্রেরি লোড হয়নি। ইন্টারনেট চেক করে পেজ রিফ্রেশ করুন।', {icon:'⚠️'});
@@ -3168,10 +3245,11 @@ function renderBarcodeLabelsAndPrint(items, size, opts, layout){
   const units = [];
   items.forEach(it=>{ units.push(...buildBarcodeLabelUnits(it.product, it.qty, opts)); });
 
-  let bodyHTML, layoutCSS;
+  // label drawing area (mm)
+  let labelW, labelH, bodyHTML, layoutCSS;
   if(layout === 'a4'){
-    // Arrange labels in a grid on standard A4 sheets — good for sticker sheets printed on a normal printer
     const A4_W = 210, A4_H = 297, MARGIN = 8, GAP = 2.5;
+    labelW = size.width; labelH = size.height;
     const cols = Math.max(1, Math.floor((A4_W - 2*MARGIN + GAP) / (size.width + GAP)));
     const rows = Math.max(1, Math.floor((A4_H - 2*MARGIN + GAP) / (size.height + GAP)));
     const perPage = cols * rows;
@@ -3184,41 +3262,64 @@ function renderBarcodeLabelsAndPrint(items, size, opts, layout){
   #print-area .a4Sheet:last-child{ page-break-after:auto; break-after:auto; }
   #print-area .barcodeLabel{ width:${size.width}mm; height:${size.height}mm; }`;
   } else {
-    // [ফিক্স #1.3/#1.4] Thermal roll: @page margin 0 নয় (কিনারা কাটে), লেবেলের উচ্চতা পেপারের চেয়ে সামান্য কম (cut margin),
-    // page-break + break-after দুটোই, wrapper-এ display:block + overflow:hidden
-    const PAGE_MX = 2, PAGE_MY = 1.5, CUT = 0.7;
-    const lw = Math.max(5, size.width - 2*PAGE_MX);
-    const lh = Math.max(5, size.height - 2*PAGE_MY - CUT);
+    const PAGE_MX = 1.5, PAGE_MY = 1, CUT = 0.6;
+    labelW = Math.max(5, size.width - 2*PAGE_MX);
+    labelH = Math.max(5, size.height - 2*PAGE_MY - CUT);
     bodyHTML = units.map(u=>`<div class="barcodeLabelPage">${u}</div>`).join('');
     layoutCSS = `
   @page{ size:${size.width}mm ${size.height}mm; margin:${PAGE_MY}mm ${PAGE_MX}mm; }
-  #print-area .barcodeLabelPage{ display:block; overflow:hidden; width:${lw}mm; height:${lh}mm; margin:0; padding:0; background:#fff; page-break-after:always; break-after:page; break-before:auto; }
+  #print-area .barcodeLabelPage{ display:block; overflow:hidden; width:${labelW}mm; height:${labelH}mm; margin:0; padding:0; background:#fff; page-break-after:always; break-after:page; break-before:auto; }
   #print-area .barcodeLabelPage:last-child{ page-break-after:auto; break-after:auto; }
   #print-area .barcodeLabel{ width:100%; height:100%; }`;
   }
+  const PAD = 0.6;                         // mm padding inside a label
+  const availW = labelW - 2*PAD;           // mm available for bars + quiet zones
+  const sampleName = items.length ? _labelDisplayName(items[0].product) : '';
+  const barH = _labelBarHeight(labelH, opts, availW, sampleName);
 
-  const barcodeFontSize = opts.barcodeText ? opts.barcodeText.size : 14;
-  // [ফিক্স #17] "Barcode Text (SKU)" চেকবক্স এখন সত্যিই কাজ করে
-  const showBarcodeText = opts.barcodeText ? !!opts.barcodeText.checked : true;
   const css = `
   #print-area *{ box-sizing:border-box; }
-  #print-area .barcodeLabel{ padding:1.2mm; border:0.3mm dashed #999; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; background:#fff; color:#000; overflow:hidden; font-family:Inter,"Segoe UI","Noto Sans Bengali",sans-serif; }
-  #print-area .bl-svg{ max-width:96%; max-height:62%; }
+  #print-area .barcodeLabel{ padding:${PAD}mm; border:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; background:#fff; color:#000; overflow:hidden; font-family:Inter,"Segoe UI","Noto Sans Bengali",Arial,sans-serif; }
+  #print-area .bl-line{ width:100%; line-height:1.15; color:#000; }
+  #print-area .bl-name2{ font-weight:700; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word; margin-bottom:0.4mm; }
+  #print-area .bl-sku{ font-weight:600; letter-spacing:.3px; margin-top:0.3mm; white-space:nowrap; overflow:hidden; text-overflow:clip; }
+  #print-area .bl-mrp{ font-weight:800; margin-top:0.3mm; white-space:nowrap; }
+  #print-area svg.bl-svg{ display:block; flex:none; max-width:none; max-height:none; shape-rendering:crispEdges; }
   ${layoutCSS}`;
 
+  let tooDense = false;
   printHTMLNow(bodyHTML, css, function(area){
     area.querySelectorAll('svg.bl-svg').forEach(function(svg){
       const sku = svg.getAttribute('data-sku') || '';
       try{
-        JsBarcode(svg, sku, {format:'CODE128', displayValue:showBarcodeText, fontSize:barcodeFontSize, height:30, width:1.4, margin:3});
+        // 1 unit = 1 module, no margin, no text → we control size/quiet zone ourselves
+        JsBarcode(svg, sku, {format:'CODE128', displayValue:false, width:1, height:50, margin:0, background:'#ffffff', lineColor:'#000000'});
+        const modules = parseFloat(svg.getAttribute('width')) || 100;
+        let quiet = 10, moduleMm = availW / (modules + 2*quiet);
+        if(moduleMm < 0.25){ quiet = 7; moduleMm = availW / (modules + 2*quiet); }
+        if(moduleMm < 0.25){ quiet = 5; moduleMm = availW / (modules + 2*quiet); }
+        if(moduleMm >= 0.25){
+          moduleMm = Math.min(0.5, Math.floor(moduleMm / LABEL_DOT_MM) * LABEL_DOT_MM); // whole printer dots
+        } else {
+          tooDense = true;
+        }
+        const totalMod = modules + 2*quiet;
+        svg.setAttribute('viewBox', `${-quiet} 0 ${totalMod} 50`);
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.removeAttribute('width'); svg.removeAttribute('height');
+        svg.style.width = (totalMod * moduleMm).toFixed(3) + 'mm';
+        svg.style.height = barH.toFixed(2) + 'mm';
       }catch(e){
-        // এই SKU CODE128-এ বানানো যায়নি (যেমন বাংলা অক্ষর) — খালি লেবেলের বদলে SKU লেখা বসানো
+        // এই SKU CODE128-এ বানানো যায়নি (যেমন বাংলা অক্ষর) — SKU লেখা বসানো
         const d = document.createElement('div');
         d.textContent = sku;
         svg.replaceWith(d);
       }
     });
   });
+  if(tooDense){
+    setTimeout(()=>showToast('⚠️ Some SKUs are long for this label size — barcode may scan poorly. Use a shorter SKU or a bigger label.', 'error'), 600);
+  }
 }
 function previewAndPrintLabels(){
   const items = Object.entries(labelSelection).map(([key,qty])=>{
@@ -3230,6 +3331,7 @@ function previewAndPrintLabels(){
   const size = resolveLabelSize();
   if(!size) return;
   const layout = document.getElementById('labelLayoutSelect')?.value || 'roll';
+  saveLabelPrefs();
   renderBarcodeLabelsAndPrint(items, size, opts, layout);
 }
 // Quick actions from the Products screen — jump to the Barcode Print screen pre-selected
@@ -3418,7 +3520,7 @@ function renderAdminCharts(shops) {
 /* ===================== STEP 4: INVITES & ACTIVITY LOGS ===================== */
 
 // ১. ইনভাইটস লিস্ট রেন্ডার করা
-async function renderAdminInvites() {
+async function renderAdminInvites(rethrow) {
   const box = document.getElementById('adminInvitesList');
   if(!box) return;
   
@@ -3439,7 +3541,9 @@ async function renderAdminInvites() {
       </div>
     `).join('');
   } catch(e) {
-    box.innerHTML = '<div class="sub danger">Failed to load invites.</div>';
+    console.error(e);
+    box.innerHTML = '<div class="sub danger">Failed to load invites. Press Refresh to try again.</div>';
+    if(rethrow) throw e;
   }
 }
 
@@ -3454,7 +3558,7 @@ async function cancelAdminInvite(email) {
 }
 
 // ৩. অ্যাক্টিভিটি লগ লিস্ট রেন্ডার করা
-async function renderAdminLogs() {
+async function renderAdminLogs(rethrow) {
   const box = document.getElementById('adminActivityLogs');
   if(!box) return;
   
@@ -3486,54 +3590,15 @@ async function renderAdminLogs() {
       `;
     }).join('');
   } catch(e) {
-    box.innerHTML = '<div class="sub danger">Failed to load logs.</div>';
+    console.error(e);
+    box.innerHTML = '<div class="sub danger">Failed to load logs. Press Refresh to try again.</div>';
+    if(rethrow) throw e;
   }
 }
 
 /* ===================== STEP 5: IN-APP NOTIFICATIONS ===================== */
 
-async function renderAdminNotifications(){
-  const box = document.getElementById('adminNotificationsList');
-  if(!box) return;
-  
-  try {
-    const notifications = await window.Firebase.listAdminNotifications();
-    
-    if(!notifications.length){
-      box.innerHTML = '<div class="sub" style="padding:10px 0;">No new notifications yet.</div>';
-      return;
-    }
-
-    box.innerHTML = notifications.slice(0, 10).map(n => {
-      const date = new Date(n.timestamp);
-      const timeStr = date.toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
-
-      // টাইপ অনুযায়ী রং
-      let bgColor = 'var(--card)';
-      if(n.type === 'danger') bgColor = '#fbeceb';
-      else if(n.type === 'warning') bgColor = '#fff3cd';
-      else if(n.type === 'success') bgColor = '#edf3ef';
-
-      return `
-        <div class="row" style="background:${bgColor}; border-radius:8px; padding:10px; margin-bottom:8px; border:1px solid var(--line);">
-          <div style="flex:1;">
-            <b>${escapeHtml(n.title)}</b>
-            <div class="sub" style="margin-top:2px;">${escapeHtml(n.message)}</div>
-            <div class="sub" style="margin-top:4px;">${timeStr}</div>
-          </div>
-          ${!n.isRead ? `<button class="link" style="flex-shrink:0;" onclick="markAdminNotifRead('${n.id}')">Mark as Read</button>` : ''}
-        </div>
-      `;
-    }).join('');
-  } catch(e) {
-    box.innerHTML = '<div class="sub danger">Failed to load notifications.</div>';
-  }
-}
-
-async function markAdminNotifRead(id){
-  await window.Firebase.markAdminNotificationRead(id);
-  renderAdminNotifications();
-}
+/* notifications are now handled by the drawer code at the end of this file */
 /* ================= BATCH 1 (added): Order Hold/Resume, Stock Adjustment, JSON Backup/Restore ================= */
 
 // ১. Order Hold / Resume
@@ -3767,6 +3832,7 @@ function openDueReceipt(customerName, amount, balance) {
     <div class="dash" style="border-top:1px dashed #111;margin:8px 0"></div>
     <p style="text-align:center;font-size:11px">Thank you</p>
   `;
+  applyReceiptStyle();
   document.getElementById('dueReceiptModal').classList.add('show');
 }
 function closeDueReceiptModal() {
@@ -3894,6 +3960,7 @@ function expenseMonthKey(dateStr){
 let currentCalYear = new Date().getFullYear();
 let currentCalMonth = new Date().getMonth();
 let selectedExpenseDate = null;
+let expenseFilterMode = 'all'; // 'all' (default: everything) | 'month' | 'date'
 
 function toggleCalendar() {
     const cal = document.getElementById('customCalendar');
@@ -3939,6 +4006,7 @@ function selectExpenseDate(d) {
 }
 function resetExpenseFilter() {
     selectedExpenseDate = null;
+    expenseFilterMode = 'all';
     document.getElementById('expenseDateLabel').textContent = 'Select Date';
     document.getElementById('customCalendar').style.display = 'none';
     renderExpenseLedger();
@@ -4071,37 +4139,42 @@ function toggleExpenseDay(date) {
 function renderExpenseLedger(){
   const box = document.getElementById('expenseLedgerList');
   if(!box) return;
-  const selectedMonth = selectedExpenseDate ? expenseMonthKey(selectedExpenseDate) : toLocalISODate(new Date()).slice(0,7);
+  const mode = selectedExpenseDate ? 'date' : expenseFilterMode;
 
-  const monthExpenses = state.cash.filter(c => c.type === 'out' && expenseMonthKey(c.date) === selectedMonth);
-
-  // নির্দিষ্ট তারিখ বাছাই করা থাকলে, শুধু সেই দিনের খরচ দেখানো হবে
-  let finalExpenses = monthExpenses;
-  if (selectedExpenseDate) {
+  // ডিফল্ট: সব খরচ (কোনোটাই বাদ যায় না)। ফিল্টার দিলে শুধু তখনই আলাদা হয়।
+  let finalExpenses = state.cash.filter(c => c.type === 'out');
+  let label = 'Total Expense (All)';
+  if(mode === 'month'){
+    const thisMonth = toLocalISODate(new Date()).slice(0,7);
+    finalExpenses = finalExpenses.filter(e => expenseMonthKey(e.date) === thisMonth);
+    label = 'Total Expense (This Month)';
+  } else if(mode === 'date'){
     const targetDate = selectedExpenseDate.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-    finalExpenses = monthExpenses.filter(e => e.date === targetDate);
+    finalExpenses = finalExpenses.filter(e => e.date === targetDate);
+    label = 'Total Expense (' + targetDate + ')';
   }
+  const lbl = document.getElementById('expenseTotalLabel'); if(lbl) lbl.textContent = label;
+  const allBtn = document.getElementById('expAllBtn'), monBtn = document.getElementById('expMonthBtn');
+  if(allBtn) allBtn.classList.toggle('active-filter', mode === 'all');
+  if(monBtn) monBtn.classList.toggle('active-filter', mode === 'month');
 
   const grouped = {};
   finalExpenses.forEach(e => {
-    if(!grouped[e.date]) grouped[e.date] = { total: 0, items: [] };
-    grouped[e.date].total += e.amount;
-    grouped[e.date].items.push(e);
+    const key = e.date || 'No date';
+    if(!grouped[key]) grouped[key] = { total: 0, items: [] };
+    grouped[key].total += e.amount;
+    grouped[key].items.push(e);
   });
 
-  const sortedDates = Object.keys(grouped).sort((a,b) => new Date(b) - new Date(a));
+  const sortedDates = Object.keys(grouped).sort((a,b) => (new Date(b)||0) - (new Date(a)||0));
   let html = '';
   let grandTotal = 0;
 
   sortedDates.forEach(date => {
     const dayData = grouped[date];
     grandTotal += dayData.total;
-
-    // প্রতিটি আইটেমের জন্য Edit ও Delete বাটন সহ HTML
-    // object reference দিয়ে state.cash-এ আসল ইনডেক্স খোঁজা হচ্ছে (একই সময়/অ্যামাউন্টের ডুপ্লিকেট এন্ট্রি থাকলেও নির্ভুল থাকবে)
     const itemsHtml = dayData.items.slice().reverse().map(item => {
         const realIndex = state.cash.indexOf(item);
-
         return `
             <div class="expense-item-row">
                 <div>
@@ -4117,16 +4190,17 @@ function renderExpenseLedger(){
         `;
     }).join('');
 
+    // সব দিন খোলা অবস্থায় দেখানো হয় — যাতে লেখা সব এন্ট্রি স্ক্রল করলেই দেখা যায়
     html += `
         <div class="expense-day-wrapper">
-            <div class="expense-day-header" onclick="toggleExpenseDay('${date}')">
-                <span>📅 ${escapeHtml(date)}</span>
+            <div class="expense-day-header open" onclick="toggleExpenseDay('${escapeJsAttr(date)}')">
+                <span>📅 ${escapeHtml(date)} <small class="sub">(${dayData.items.length})</small></span>
                 <span>
                     <b style="color:var(--red)">Total: ${fmt(dayData.total)}</b>
                     <span class="chevron">▶</span>
                 </span>
             </div>
-            <div class="expense-day-body" id="day-body-${date}">
+            <div class="expense-day-body" id="day-body-${escapeHtml(date)}" style="display:block">
                 ${itemsHtml}
             </div>
         </div>
@@ -4134,22 +4208,18 @@ function renderExpenseLedger(){
   });
 
   document.getElementById('expenseTotal').textContent = fmt(grandTotal);
-  box.innerHTML = html || '<div class="sub" style="padding:20px; text-align:center">No expenses found for this date.</div>';
-
-  // ক্যালেন্ডারে সিলেক্ট করা দিনটি যদি থাকে, সেটি অটো-ওপেন করা
-  if (selectedExpenseDate) {
-      const selectedDateStr = selectedExpenseDate.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-      const body = document.getElementById(`day-body-${selectedDateStr}`);
-      if (body) {
-          body.style.display = 'block';
-          body.parentElement.querySelector('.expense-day-header').classList.add('open');
-      }
-  }
+  box.innerHTML = html || '<div class="sub" style="padding:20px; text-align:center">No expenses found.</div>';
 }
 
 // ===== "This Month" বাটন — তারিখ ফিল্টার রিসেট করে চলতি মাস দেখাবে =====
+function setExpenseAll(){
+  selectedExpenseDate = null; expenseFilterMode = 'all';
+  const label = document.getElementById('expenseDateLabel');
+  if(label) label.textContent = 'Select Date';
+  renderExpenseLedger();
+}
 function setExpenseMonth(){
-  selectedExpenseDate = null;
+  selectedExpenseDate = null; expenseFilterMode = 'month';
   const label = document.getElementById('expenseDateLabel');
   if(label) label.textContent = 'Select Date';
   renderExpenseLedger();
@@ -4688,8 +4758,8 @@ function printElement(elementId) {
   clone.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
   const wrap = document.createElement('div');
   wrap.appendChild(clone);
-  // [ফিক্স #1.4] @page margin 0 নয় — উপরে/নিচের লাইন কাটা পড়ে
-  printHTMLNow(wrap.innerHTML, '@page{ margin:1.5mm 2mm; }');
+  // 58mm / 80mm thermal page; small margin keeps lines from being clipped and hides browser header/footer
+  printHTMLNow(wrap.innerHTML, receiptPageCss());
 }
 
 /* ===================== [ফিক্স #20] MOBILE "MORE" MENU ===================== */
@@ -4751,3 +4821,681 @@ function toggleMobileMore(force){
     };
   });
 })();
+/* ================= PRODUCT IMAGE REMOVAL (safe migration with backup + rollback) ================= */
+// Product images are no longer part of the system. Old images (base64 stored inside the shop document)
+// are removed only after a backup JSON file has been downloaded. The backup can be restored later.
+function countProductImages(){
+  return (state && Array.isArray(state.products)) ? state.products.filter(p=>p && p.image).length : 0;
+}
+function _stripImagesFromObject(o){
+  let n = 0;
+  if(Array.isArray(o)){ o.forEach(x=>{ n += _stripImagesFromObject(x); }); return n; }
+  if(o && typeof o === 'object'){
+    if(typeof o.image === 'string' && o.image){ delete o.image; n++; }
+    else if('image' in o) delete o.image;
+    return n;
+  }
+  return 0;
+}
+function _downloadTextFile(filename, text, mime){
+  const blob = new Blob([text], {type: mime || 'application/json;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1500);
+}
+async function removeAllProductImages(opts){
+  opts = opts || {};
+  if(isImpersonating){ showAlertDialog('Not available in shop-view mode.', {icon:'🚫'}); return; }
+  if(currentRole !== 'Admin'){ if(!opts.silent) showAlertDialog('Only the shop owner can do this.', {icon:'🚫'}); return; }
+  const n = countProductImages();
+  const heldImgs = (state.heldOrders||[]).some(h => JSON.stringify(h).includes('"image":"data:'));
+  if(!n && !heldImgs){
+    if(!opts.silent) showAlertDialog('No product images found — your product list is already image-free.', {icon:'✅'});
+    return;
+  }
+  const ok = await showConfirmDialog(
+    `${n} product image(s) were found. A backup file (JSON) will be downloaded first, then all product images will be removed permanently from your data. All other product data stays unchanged. Continue?`,
+    {icon:'🧹', title:'Remove Product Images', okLabel:'Backup & Remove'});
+  if(!ok) return;
+  // 1) backup first
+  try{
+    const backup = {
+      type: 'sbpos-product-images-backup', version: 1, createdAt: new Date().toISOString(), shopId: currentShopId,
+      images: state.products.filter(p=>p.image).map(p=>({id:p.id, name:p.name, image:p.image}))
+    };
+    _downloadTextFile('product_images_backup_' + todayStr() + '.json', JSON.stringify(backup));
+  }catch(e){
+    console.error(e);
+    showAlertDialog('Backup could not be created, so nothing was removed.', {icon:'❌'});
+    return;
+  }
+  // 2) remove
+  let removed = _stripImagesFromObject(state.products);
+  removed += _stripImagesFromObject(state.heldOrders || []);
+  save();
+  renderProductsTable(); renderPOSGrid(); renderDashboard();
+  showAlertDialog(`${removed} image(s) removed. The backup file was saved to your Downloads folder — keep it safe. You can restore it from Settings → "Restore Images Backup".`, {icon:'✅', title:'Done'});
+}
+async function restoreProductImagesBackup(event){
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if(!file) return;
+  try{
+    const data = JSON.parse(await file.text());
+    if(!data || data.type !== 'sbpos-product-images-backup' || !Array.isArray(data.images)) throw new Error('bad file');
+    const ok = await showConfirmDialog(`Restore ${data.images.length} product image(s) from this backup? (Not recommended unless you want images back.)`, {icon:'↩️', title:'Restore Images', okLabel:'Restore'});
+    if(!ok) return;
+    let n = 0;
+    data.images.forEach(x=>{ const p = state.products.find(q=>q.id===x.id); if(p && x.image){ p.image = x.image; n++; } });
+    save(); renderProductsTable(); renderPOSGrid();
+    showAlertDialog(`${n} image(s) restored.`, {icon:'✅'});
+  }catch(e){
+    showAlertDialog('This is not a valid product-images backup file.', {icon:'❌'});
+  }
+}
+// After login: if old images still exist, offer the safe removal once per session
+function promptImageMigration(){
+  if(isImpersonating || currentRole !== 'Admin' || !state) return;
+  if(countProductImages() > 0) removeAllProductImages({silent:true});
+}
+
+/* ================= PRODUCT EXPORT (Excel .xlsx / CSV) ================= */
+function _taxNameById(id){
+  const t = (state.taxRates||[]).find(x=>x.id===id);
+  return t ? t.name : '';
+}
+function buildProductExportData(){
+  const products = [];
+  const variations = [];
+  (state.products||[]).forEach(p=>{
+    const isVar = p.productType === 'variable' && Array.isArray(p.variations) && p.variations.length;
+    const totalStock = isVar ? p.variations.reduce((a,v)=>a+(+v.stock||0),0) : (+p.stock||0);
+    const vSummary = isVar ? p.variations.map(v=>`${v.value} [SKU:${v.sku||'-'} | Buy:${+v.purchase||0} | Sell:${+v.sell||0} | Stock:${+v.stock||0}]`).join(' ; ') : '';
+    products.push({
+      'Product Name': p.name || '',
+      'SKU': p.sku || '',
+      'Barcode': p.sku || '',
+      'Purchase Price': isVar ? '' : (+p.purchase||0),
+      'Selling Price': isVar ? '' : (+p.sell||0),
+      'Stock': totalStock,
+      'Category': p.category || '',
+      'Brand': p.brand || '',
+      'Unit': p.unit || '',
+      'Description': p.description || '',
+      'Product Type': isVar ? 'Variable' : 'Simple',
+      'Variations': vSummary,
+      'Low Stock Alert': (p.lowStockAlert===undefined||p.lowStockAlert===null) ? '' : p.lowStockAlert,
+      'Tax': _taxNameById(p.taxId),
+      'Auto Discount Type': p.autoDiscountType && p.autoDiscountType !== 'none' ? p.autoDiscountType : '',
+      'Auto Discount Value': p.autoDiscountType && p.autoDiscountType !== 'none' ? (+p.autoDiscountValue||0) : '',
+      'Icon': p.emoji || ''
+    });
+    if(isVar){
+      p.variations.forEach(v=>variations.push({
+        'Product Name': p.name || '', 'Variation': v.value || '', 'SKU': v.sku || '',
+        'Purchase Price': +v.purchase||0, 'Selling Price': +v.sell||0, 'Stock': +v.stock||0
+      }));
+    }
+  });
+  return {products, variations};
+}
+function _exportGuard(){
+  if(typeof XLSX === 'undefined'){ showAlertDialog('Export library is still loading — please try again in a moment.', {icon:'⏳'}); return false; }
+  if(!state || !state.products || !state.products.length){ showAlertDialog('There are no products to export.', {icon:'⚠️'}); return false; }
+  return true;
+}
+function exportProductsExcel(){
+  if(!_exportGuard()) return;
+  try{
+    const {products, variations} = buildProductExportData();
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(products);
+    ws['!cols'] = [{wch:30},{wch:16},{wch:16},{wch:14},{wch:14},{wch:10},{wch:16},{wch:16},{wch:14},{wch:26},{wch:12},{wch:50},{wch:14},{wch:14},{wch:18},{wch:18},{wch:8}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Products');
+    if(variations.length){
+      const wv = XLSX.utils.json_to_sheet(variations);
+      wv['!cols'] = [{wch:30},{wch:18},{wch:16},{wch:14},{wch:14},{wch:10}];
+      XLSX.utils.book_append_sheet(wb, wv, 'Variations');
+    }
+    XLSX.writeFile(wb, 'products_export_' + todayStr() + '.xlsx');
+    showToast('✅ ' + products.length + ' products exported (Excel).');
+  }catch(e){
+    console.error(e);
+    showAlertDialog('Export failed. Please try again.', {icon:'❌'});
+  }
+}
+function exportProductsCSV(){
+  if(!_exportGuard()) return;
+  try{
+    const {products} = buildProductExportData();
+    const ws = XLSX.utils.json_to_sheet(products);
+    const csv = XLSX.utils.sheet_to_csv(ws);
+    // UTF-8 BOM so Microsoft Excel opens Bangla text correctly
+    _downloadTextFile('products_export_' + todayStr() + '.csv', '\ufeff' + csv, 'text/csv;charset=utf-8;');
+    showToast('✅ ' + products.length + ' products exported (CSV).');
+  }catch(e){
+    console.error(e);
+    showAlertDialog('Export failed. Please try again.', {icon:'❌'});
+  }
+}
+
+/* ================= RECEIPT STYLE (font size 10–18px, 58mm / 80mm) ================= */
+function clampReceiptFont(v){ v = parseInt(v,10); if(isNaN(v)) v = 13; return Math.min(18, Math.max(10, v)); }
+function receiptMM(){ return (state && state.settings && /58/.test(state.settings.receiptSize||'')) ? 58 : 80; }
+function receiptPageCss(){
+  const w = receiptMM();
+  return `@page{ size:${w}mm auto; margin:2mm 1.5mm; } html,body{ width:${w}mm; margin:0; padding:0; }`;
+}
+function previewReceiptFont(v){
+  document.documentElement.style.setProperty('--rfs', clampReceiptFont(v) + 'px');
+}
+function applyReceiptStyle(){
+  const st = (state && state.settings) || {};
+  const px = clampReceiptFont(st.receiptFontSize || 13);
+  document.documentElement.style.setProperty('--rfs', px + 'px');
+  const w = receiptMM();
+  document.documentElement.style.setProperty('--rwidth', w === 58 ? '210px' : '300px');
+  document.documentElement.setAttribute('data-rsize', String(w));
+}
+
+/* ================= GLOBAL PREMIUM DROPDOWN (reusable component: every <select> in the app) =================
+   Each native <select> is kept in the DOM (so existing IDs, onchange handlers, .value reads, Firebase saves and
+   form logic keep working) but is visually replaced by a custom dropdown. Works for selects added later too
+   (modals, JS-rendered forms). Features: animation, search (many options), keyboard, outside-click close,
+   scroll, auto flip up/down, mobile friendly. Opt-out: add class "no-sb-select" to a select. */
+(function(){
+  const nativeValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+  const nativeIndex = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'selectedIndex');
+  const SEARCH_MIN = 8;
+  let openInst = null;
+  let menuEl = null;
+
+  function ensureMenu(){
+    if(menuEl) return menuEl;
+    menuEl = document.createElement('div');
+    menuEl.className = 'sb-select-menu';
+    menuEl.setAttribute('role', 'listbox');
+    menuEl.style.display = 'none';
+    document.body.appendChild(menuEl);
+    menuEl.addEventListener('mousedown', e => e.preventDefault()); // keep focus on trigger
+    return menuEl;
+  }
+
+  function Inst(sel){
+    this.sel = sel;
+    this.items = [];
+    this.active = -1;
+    this.typed = '';
+    this.typedTimer = null;
+    const wrap = this.wrap = document.createElement('div');
+    wrap.className = 'sb-select' + (sel.classList.contains('no-arrow') ? ' sb-compact' : '');
+    const st = sel.style;
+    ['flex','width','minWidth','maxWidth','margin','marginLeft','marginRight','marginTop','marginBottom','gridColumn','alignSelf'].forEach(p=>{ if(st[p]) wrap.style[p] = st[p]; });
+    if(st.display === 'none') wrap.style.display = 'none';
+    const btn = this.btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'sb-select-btn';
+    btn.setAttribute('aria-haspopup', 'listbox');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.innerHTML = '<span class="sb-select-label"></span><span class="sb-select-arrow" aria-hidden="true"></span>';
+    this.labelEl = btn.firstChild;
+    sel.parentNode.insertBefore(wrap, sel);
+    wrap.appendChild(btn);
+    wrap.appendChild(sel);
+    sel.classList.add('sb-native-hidden');
+    sel.tabIndex = -1;
+    sel.setAttribute('aria-hidden', 'true');
+    sel.dataset.sbEnhanced = '1';
+    sel._sbInst = this;
+
+    // programmatic .value / .selectedIndex changes (used all over the app) refresh the label
+    const self = this;
+    Object.defineProperty(sel, 'value', {
+      configurable: true,
+      get(){ return nativeValue.get.call(this); },
+      set(v){ nativeValue.set.call(this, v); self.refresh(); }
+    });
+    Object.defineProperty(sel, 'selectedIndex', {
+      configurable: true,
+      get(){ return nativeIndex.get.call(this); },
+      set(v){ nativeIndex.set.call(this, v); self.refresh(); }
+    });
+    sel.addEventListener('change', () => self.refresh());
+    new MutationObserver(() => self.refresh()).observe(sel, {childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:['disabled','style','class']});
+
+    btn.addEventListener('click', () => { self.isOpen() ? self.close() : self.open(); });
+    btn.addEventListener('keydown', e => self.onKey(e));
+    this.refresh();
+  }
+  Inst.prototype.isOpen = function(){ return openInst === this; };
+  Inst.prototype.refresh = function(){
+    const sel = this.sel;
+    const opt = sel.options[nativeIndex.get.call(sel)];
+    const text = opt ? opt.textContent.trim() : '';
+    this.labelEl.textContent = text || '\u00a0';
+    this.labelEl.classList.toggle('sb-placeholder', !opt || opt.value === '');
+    this.btn.disabled = sel.disabled;
+    this.wrap.classList.toggle('disabled', sel.disabled);
+    this.wrap.style.display = sel.style.display === 'none' ? 'none' : '';
+    if(this.isOpen()) this.buildItems();
+  };
+  Inst.prototype.buildItems = function(keepSearch){
+    const sel = this.sel, menu = ensureMenu();
+    const q = keepSearch && this.search ? this.search.value.trim().toLowerCase() : '';
+    const opts = Array.from(sel.options);
+    const cur = nativeIndex.get.call(sel);
+    menu.innerHTML = '';
+    this.search = null;
+    if(opts.length > SEARCH_MIN){
+      const wrap = document.createElement('div'); wrap.className = 'sb-select-search';
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.placeholder = 'Search…'; inp.autocomplete = 'off';
+      inp.value = keepSearch && this._lastQ ? this._lastQ : '';
+      wrap.appendChild(inp); menu.appendChild(wrap);
+      this.search = inp;
+      inp.addEventListener('input', () => { this._lastQ = inp.value; this.buildItems(true); });
+      inp.addEventListener('keydown', e => this.onKey(e));
+    }
+    const list = document.createElement('div'); list.className = 'sb-select-list';
+    menu.appendChild(list);
+    this.items = [];
+    const qq = this.search ? this.search.value.trim().toLowerCase() : '';
+    opts.forEach((o, i) => {
+      const t = o.textContent.trim();
+      if(qq && !t.toLowerCase().includes(qq)) return;
+      const d = document.createElement('div');
+      d.className = 'sb-opt' + (i === cur ? ' selected' : '') + (o.disabled ? ' disabled' : '');
+      d.setAttribute('role', 'option');
+      d.dataset.index = i;
+      d.innerHTML = '<span class="sb-opt-text"></span><span class="sb-opt-check">✓</span>';
+      d.firstChild.textContent = t || '\u00a0';
+      d.addEventListener('click', () => { if(!o.disabled) this.choose(i); });
+      d.addEventListener('mousemove', () => this.setActive(this.items.indexOf(d), false));
+      list.appendChild(d);
+      this.items.push(d);
+    });
+    if(!this.items.length){
+      const e = document.createElement('div'); e.className = 'sb-select-empty'; e.textContent = 'No results';
+      list.appendChild(e);
+    }
+    const selIdx = this.items.findIndex(d => d.classList.contains('selected'));
+    this.setActive(selIdx >= 0 ? selIdx : (this.items.length ? 0 : -1), !keepSearch);
+    this.position();
+  };
+  Inst.prototype.setActive = function(i, scroll){
+    this.items.forEach(d => d.classList.remove('active'));
+    this.active = i;
+    const d = this.items[i];
+    if(d){ d.classList.add('active'); if(scroll !== false) d.scrollIntoView({block:'nearest'}); }
+  };
+  Inst.prototype.open = function(){
+    if(this.sel.disabled) return;
+    if(openInst && openInst !== this) openInst.close();
+    openInst = this;
+    this._lastQ = '';
+    const menu = ensureMenu();
+    menu.style.display = 'block';
+    menu.classList.remove('show');
+    this.btn.setAttribute('aria-expanded', 'true');
+    this.wrap.classList.add('open');
+    this.buildItems();
+    requestAnimationFrame(() => menu.classList.add('show'));
+    if(this.search) setTimeout(() => this.search && this.search.focus(), 30);
+  };
+  Inst.prototype.close = function(refocus){
+    if(openInst !== this) return;
+    openInst = null;
+    const menu = ensureMenu();
+    menu.classList.remove('show');
+    menu.style.display = 'none';
+    this.btn.setAttribute('aria-expanded', 'false');
+    this.wrap.classList.remove('open');
+    if(refocus) this.btn.focus();
+  };
+  Inst.prototype.position = function(){
+    const menu = ensureMenu(), r = this.btn.getBoundingClientRect();
+    const vh = window.innerHeight, vw = window.innerWidth;
+    menu.style.minWidth = r.width + 'px';
+    menu.style.maxWidth = Math.min(vw - 16, Math.max(r.width, 360)) + 'px';
+    menu.style.maxHeight = 'none';
+    const list = menu.querySelector('.sb-select-list');
+    const searchH = menu.querySelector('.sb-select-search') ? 52 : 0;
+    const want = Math.min(menu.scrollHeight || 260, 320);
+    const below = vh - r.bottom - 10, above = r.top - 10;
+    const openUp = below < Math.min(want, 200) && above > below;
+    const avail = Math.max(120, openUp ? above : below);
+    const mh = Math.min(320, avail);
+    menu.style.maxHeight = mh + 'px';
+    if(list) list.style.maxHeight = (mh - searchH - 2) + 'px';
+    const h = Math.min(menu.scrollHeight, mh);
+    menu.style.top = (openUp ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+    let left = r.left;
+    const w = menu.offsetWidth;
+    if(left + w > vw - 8) left = Math.max(8, vw - 8 - w);
+    menu.style.left = left + 'px';
+    menu.classList.toggle('flip', openUp);
+  };
+  Inst.prototype.choose = function(i){
+    const sel = this.sel;
+    const changed = nativeIndex.get.call(sel) !== i;
+    nativeIndex.set.call(sel, i);
+    this.close(true);
+    this.refresh();
+    if(changed){
+      sel.dispatchEvent(new Event('input', {bubbles:true}));
+      sel.dispatchEvent(new Event('change', {bubbles:true}));
+    }
+  };
+  Inst.prototype.move = function(delta){
+    if(!this.items.length) return;
+    let i = this.active;
+    for(let n = 0; n < this.items.length; n++){
+      i = (i + delta + this.items.length) % this.items.length;
+      if(!this.items[i].classList.contains('disabled')) break;
+    }
+    this.setActive(i);
+  };
+  Inst.prototype.onKey = function(e){
+    const k = e.key;
+    if(!this.isOpen()){
+      if(k === 'ArrowDown' || k === 'ArrowUp' || k === 'Enter' || k === ' '){ e.preventDefault(); this.open(); }
+      return;
+    }
+    const inSearch = e.target === this.search;
+    if(k === 'ArrowDown'){ e.preventDefault(); this.move(1); }
+    else if(k === 'ArrowUp'){ e.preventDefault(); this.move(-1); }
+    else if(k === 'Home' && !inSearch){ e.preventDefault(); this.setActive(0); }
+    else if(k === 'End' && !inSearch){ e.preventDefault(); this.setActive(this.items.length - 1); }
+    else if(k === 'Enter' || (k === ' ' && !inSearch)){
+      e.preventDefault();
+      const d = this.items[this.active];
+      if(d) this.choose(+d.dataset.index);
+    }
+    else if(k === 'Escape'){ e.preventDefault(); e.stopPropagation(); this.close(true); }
+    else if(k === 'Tab'){ this.close(); }
+    else if(!inSearch && k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey){
+      // type-ahead
+      clearTimeout(this.typedTimer);
+      this.typed += k.toLowerCase();
+      this.typedTimer = setTimeout(() => { this.typed = ''; }, 700);
+      const i = this.items.findIndex(d => d.textContent.trim().toLowerCase().startsWith(this.typed));
+      if(i >= 0) this.setActive(i);
+    }
+  };
+
+  function enhance(sel){
+    if(!sel || sel.dataset.sbEnhanced || sel.multiple || sel.size > 1 || sel.classList.contains('no-sb-select')) return;
+    if(!sel.parentNode) return;
+    new Inst(sel);
+  }
+  function scan(root){
+    if(!root) return;
+    if(root.nodeType === 1 && root.tagName === 'SELECT'){ enhance(root); return; }
+    if(root.querySelectorAll) root.querySelectorAll('select').forEach(enhance);
+  }
+  window.sbEnhanceSelects = function(root){ scan(root || document); };
+
+  // outside click closes
+  document.addEventListener('mousedown', e => {
+    if(!openInst) return;
+    if(menuEl && menuEl.contains(e.target)) return;
+    if(openInst.wrap.contains(e.target)) return;
+    openInst.close();
+  }, true);
+  window.addEventListener('resize', () => { if(openInst) openInst.position(); });
+  window.addEventListener('scroll', e => {
+    if(!openInst) return;
+    if(menuEl && menuEl.contains(e.target)) return;
+    openInst.position();
+  }, true);
+
+  function init(){
+    scan(document);
+    new MutationObserver(muts => {
+      muts.forEach(m => m.addedNodes.forEach(n => { if(n.nodeType === 1 && !(n.classList && n.classList.contains('sb-select-menu'))) scan(n); }));
+    }).observe(document.body, {childList:true, subtree:true});
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+
+
+/* ================= ADMIN: REFRESH BUTTONS (loading state + success/error feedback) ================= */
+async function adminRunRefresh(btn, task, okMsg){
+  if(currentUid !== SUPER_ADMIN_UID) return;
+  if(btn && btn.dataset.busy === '1') return;
+  if(btn){ btn.dataset.busy = '1'; btn.classList.add('is-loading'); btn.disabled = true; }
+  try{
+    await task();
+    if(okMsg) showToast(okMsg, 'success');
+  }catch(e){
+    console.error('Admin refresh failed', e);
+    showToast('Refresh failed: ' + ((e && (e.message || e.code)) || 'network/permission error'), 'error');
+  }finally{
+    if(btn){ btn.dataset.busy = ''; btn.classList.remove('is-loading'); btn.disabled = false; }
+  }
+}
+function adminRefreshShops(btn){
+  return adminRunRefresh(btn, () => refreshAdminPanel(), '✅ Shop list refreshed');
+}
+function adminRefreshInvites(btn){
+  return adminRunRefresh(btn, async () => {
+    await renderAdminInvites(true);
+    const el = document.getElementById('adminTotalInvites');
+    if(el){ try{ el.textContent = await window.Firebase.countInvites(); }catch(e){} }
+  }, '✅ Invites refreshed');
+}
+function adminRefreshLogs(btn){
+  return adminRunRefresh(btn, () => renderAdminLogs(true), '✅ Activity log refreshed');
+}
+function adminRefreshNotifs(btn){
+  return adminRunRefresh(btn, () => loadAdminNotifications(true), '✅ Notifications refreshed');
+}
+function adminRefreshAll(btn){
+  return adminRunRefresh(btn, async () => {
+    _adminShopsRaw = null;
+    await Promise.all([
+      renderAdminPanel({rethrow:true, shopsOnly:true}),
+      renderAdminInvites(true),
+      renderAdminLogs(true),
+      loadAdminNotifications(true)
+    ]);
+  }, '✅ Dashboard refreshed');
+}
+
+/* ================= ADMIN: NOTIFICATION DRAWER (bell icon + unread badge + live updates) ================= */
+let _adminNotifs = [];
+let _adminNotifUnsub = null;
+let _adminNotifLoaded = false;
+function adminUnreadCount(){ return _adminNotifs.filter(n => !n.isRead).length; }
+function updateAdminNotifBadge(){
+  const c = adminUnreadCount();
+  const txt = c > 99 ? '99+' : String(c);
+  const badge = document.getElementById('adminBellBadge');
+  if(badge){ badge.textContent = txt; badge.style.display = c ? '' : 'none'; }
+  const pill = document.getElementById('adminUnreadPill');
+  if(pill){ pill.textContent = txt; pill.style.display = c ? '' : 'none'; }
+  const sub = document.getElementById('adminNotifSub');
+  if(sub) sub.textContent = _adminNotifLoaded ? (c ? c + ' unread · ' + _adminNotifs.length + ' total' : 'All caught up · ' + _adminNotifs.length + ' total') : 'Loading…';
+}
+function renderAdminNotifications(){
+  const box = document.getElementById('adminNotificationsList');
+  if(!box) return;
+  updateAdminNotifBadge();
+  if(!_adminNotifLoaded){ box.innerHTML = '<div class="sub" style="padding:16px">Loading notifications...</div>'; return; }
+  if(!_adminNotifs.length){
+    box.innerHTML = '<div class="notif-empty"><div style="font-size:34px">🔕</div><div>No notifications yet</div></div>';
+    return;
+  }
+  box.innerHTML = _adminNotifs.map(n => {
+    const timeStr = new Date(n.timestamp || Date.now()).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+    const type = ['danger','warning','success'].includes(n.type) ? n.type : 'info';
+    return `<div class="notif-item ${type}${n.isRead ? ' read' : ''}">
+      <div class="notif-dot"></div>
+      <div class="notif-main">
+        <b>${escapeHtml(n.title || '')}</b>
+        <div class="notif-msg">${escapeHtml(n.message || '')}</div>
+        <div class="notif-time">${timeStr}</div>
+      </div>
+      ${!n.isRead ? `<button class="admin-mini-btn" onclick="markAdminNotifRead('${escapeJsAttr(n.id)}')">Mark read</button>` : ''}
+    </div>`;
+  }).join('');
+}
+async function loadAdminNotifications(rethrow){
+  try{
+    _adminNotifs = await window.Firebase.listAdminNotifications(100);
+    _adminNotifLoaded = true;
+    renderAdminNotifications();
+  }catch(e){
+    console.error(e);
+    const box = document.getElementById('adminNotificationsList');
+    if(box && !_adminNotifLoaded) box.innerHTML = '<div class="sub danger" style="padding:16px">Failed to load notifications. Press Refresh to try again.</div>';
+    if(rethrow) throw e;
+  }
+}
+function startAdminNotifWatcher(){
+  if(_adminNotifUnsub || currentUid !== SUPER_ADMIN_UID || !window.Firebase || !window.Firebase.watchAdminNotifications) return;
+  _adminNotifUnsub = window.Firebase.watchAdminNotifications(list => {
+    const prevIds = new Set(_adminNotifs.map(n => n.id));
+    const hadData = _adminNotifLoaded;
+    _adminNotifs = list;
+    _adminNotifLoaded = true;
+    renderAdminNotifications();
+    if(hadData){
+      const fresh = list.filter(n => !prevIds.has(n.id) && !n.isRead);
+      if(fresh.length) showToast('🔔 ' + (fresh[0].title || 'New notification'), 'success');
+    }
+  }, () => { _adminNotifUnsub = null; loadAdminNotifications(); });
+}
+function stopAdminNotifWatcher(){
+  if(_adminNotifUnsub){ try{ _adminNotifUnsub(); }catch(e){} _adminNotifUnsub = null; }
+  _adminNotifs = []; _adminNotifLoaded = false;
+  updateAdminNotifBadge();
+  closeAdminNotifDrawer();
+}
+function openAdminNotifDrawer(){
+  if(currentUid !== SUPER_ADMIN_UID) return;
+  document.getElementById('adminNotifOverlay').classList.add('show');
+  const d = document.getElementById('adminNotifDrawer');
+  d.classList.add('show'); d.setAttribute('aria-hidden', 'false');
+  renderAdminNotifications();
+  if(!_adminNotifUnsub || !_adminNotifLoaded) loadAdminNotifications();
+}
+function closeAdminNotifDrawer(){
+  const o = document.getElementById('adminNotifOverlay');
+  const d = document.getElementById('adminNotifDrawer');
+  if(o) o.classList.remove('show');
+  if(d){ d.classList.remove('show'); d.setAttribute('aria-hidden', 'true'); }
+}
+function toggleAdminNotifDrawer(){
+  const d = document.getElementById('adminNotifDrawer');
+  if(d && d.classList.contains('show')) closeAdminNotifDrawer(); else openAdminNotifDrawer();
+}
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeAdminNotifDrawer(); });
+async function markAdminNotifRead(id){
+  const n = _adminNotifs.find(x => x.id === id);
+  if(n) n.isRead = true;
+  renderAdminNotifications();
+  try{ await window.Firebase.markAdminNotificationRead(id); }
+  catch(e){ if(n) n.isRead = false; renderAdminNotifications(); showToast('Could not mark as read: ' + (e.message || e.code || 'error'), 'error'); }
+}
+async function markAllAdminNotifsRead(){
+  const ids = _adminNotifs.filter(n => !n.isRead).map(n => n.id);
+  if(!ids.length){ showToast('Nothing unread.', 'success'); return; }
+  _adminNotifs.forEach(n => { n.isRead = true; });
+  renderAdminNotifications();
+  try{ await window.Firebase.markAllAdminNotificationsRead(ids); showToast('✅ All marked as read', 'success'); }
+  catch(e){ showToast('Failed: ' + (e.message || e.code || 'error'), 'error'); loadAdminNotifications(); }
+}
+
+
+/* ================= SALES HISTORY (all sales, newest first) + DELETE ALL (password protected) ================= */
+let _histShown = 0;
+const HIST_PAGE = 300;
+function _histFiltered(){
+  const q = (document.getElementById('historySearch')?.value || '').trim().toLowerCase();
+  const list = (state.sales || []).slice().reverse();
+  if(!q) return list;
+  return list.filter(x => {
+    const hay = [x.invoice, x.customer, x.date, x.time, x.payment].concat((x.items||[]).map(i=>i.name)).join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+}
+function renderSalesHistory(reset){
+  const body = document.getElementById('historyTableBody');
+  if(!body) return;
+  if(reset) _histShown = 0;
+  const all = (state.sales || []);
+  const list = _histFiltered();
+  _histShown = Math.min(list.length, _histShown + HIST_PAGE);
+  const rows = list.slice(0, _histShown).map(x=>{
+    const items = (x.items||[]).map(i=>`${escapeHtml(i.name)} ×${i.qty}`).join(', ');
+    const paid = (typeof x.paid === 'object' && x.paid) ? Object.values(x.paid).reduce((a,v)=>a+(+v||0),0) : (+x.paid||0);
+    return `<tr>
+      <td>${escapeHtml(x.date||'')}<div class="sub">${escapeHtml(x.time||'')}</div></td>
+      <td><b>${escapeHtml(x.invoice||'')}</b></td>
+      <td>${escapeHtml(x.customer||'Walk-in Customer')}</td>
+      <td style="max-width:340px;white-space:normal">${items || '-'}</td>
+      <td><b>${fmt(x.total||0)}</b></td>
+      <td>${fmt(paid)}</td>
+      <td class="${(x.due||0)>0?'danger':''}">${fmt(x.due||0)}</td>
+      <td><span class="pill">${escapeHtml(x.payment||'')}</span></td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = rows || '<tr><td colspan="8" class="sub" style="text-align:center;padding:24px 0">No sales history yet.</td></tr>';
+  const more = document.getElementById('historyMoreBtn');
+  if(more){
+    more.style.display = _histShown < list.length ? '' : 'none';
+    more.textContent = 'Load more (' + (list.length - _histShown) + ' remaining)';
+  }
+  setText('histCount', all.length);
+  setText('histTotal', fmt(all.reduce((a,x)=>a+(+x.total||0),0)));
+  setText('histItems', all.reduce((a,x)=>a+(x.items||[]).reduce((b,i)=>b+(+i.qty||0),0),0));
+  const delBtn = document.getElementById('historyDeleteAllBtn');
+  if(delBtn) delBtn.style.display = (currentRole === 'Admin' && !isImpersonating) ? '' : 'none';
+}
+function _isSalesCashEntry(c){
+  const d = String((c && c.desc) || '');
+  return !!c && (/^Sale /.test(d) || /^Due Collection/.test(d) || c.category === 'Return Refund' || /^Return Refund/.test(d));
+}
+async function deleteAllSalesHistory(){
+  if(isImpersonating){ showAlertDialog('Not available in shop-view mode.', {icon:'🚫'}); return; }
+  if(currentRole !== 'Admin'){ showAlertDialog('Only the shop owner can delete the history.', {icon:'🚫'}); return; }
+  if(!(state.sales||[]).length){ showAlertDialog('There is no sales history to delete.', {icon:'ℹ️'}); return; }
+  const ok = await showConfirmDialog(
+    `ALL sales history (${state.sales.length} sales) will be deleted together with its accounts: sales-linked cash entries, due ledger, sales returns, and customers' purchase totals / dues / points. Products, stock, purchases and expenses are NOT touched. A backup file is downloaded first. This cannot be undone.`,
+    {danger:true, icon:'🗑️', title:'Delete All History', okLabel:'Continue'});
+  if(!ok) return;
+  const pw = await showPromptDialog('Enter your shop login password to confirm.', '', {icon:'🔐', title:'Password Required', type:'password', okLabel:'Delete All'});
+  if(pw === null) return;
+  if(!pw){ showAlertDialog('Password is required.', {icon:'⚠️'}); return; }
+  try{
+    await window.Firebase.verifyPassword(pw);
+  }catch(e){
+    const code = (e && e.code) || '';
+    const msg = (code === 'auth/too-many-requests') ? 'Too many attempts. Please wait a while and try again.' : 'Wrong password. History was NOT deleted.';
+    showAlertDialog(msg, {icon:'❌', title:'Not Deleted'});
+    return;
+  }
+  // backup first (safety), then erase
+  try{
+    _downloadTextFile('sales_history_backup_' + todayStr() + '.json', JSON.stringify({
+      type:'sbpos-sales-history-backup', createdAt:new Date().toISOString(), shopId:currentShopId,
+      sales:state.sales, returns:state.returns, ledger:state.ledger,
+      cash:(state.cash||[]).filter(_isSalesCashEntry), customers:state.customers
+    }));
+  }catch(e){ console.warn('Backup download failed', e); }
+  const n = state.sales.length;
+  state.sales = [];
+  state.returns = [];
+  state.ledger = [];
+  state.cash = (state.cash||[]).filter(c => !_isSalesCashEntry(c));
+  (state.customers||[]).forEach(c=>{ c.totalPurchase = 0; c.due = 0; c.points = 0; c.lastPurchase = '-'; });
+  _lastSaleData = null;
+  save();
+  logRegularAction('Sales History Deleted', n + ' sales deleted with accounts');
+  renderAll();
+  renderSalesHistory(true);
+  showAlertDialog(n + ' sales and their accounts were deleted. A backup file was saved to your Downloads folder.', {icon:'✅', title:'History Deleted'});
+}

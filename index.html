@@ -48,7 +48,7 @@
     <div class="field"><label>Store Name</label><input id="profileStoreName" oninput="livePreviewProfileName()"></div>
     <div class="field"><label>Owner Name</label><input id="profileOwnerName" oninput="livePreviewProfileName()"></div>
     <div class="field"><label>Phone</label><input id="profilePhone"></div>
-    <div class="field"><label>Receipt Size</label><select id="profileReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div>
+    <div class="field"><label>Receipt Size</label><select id="profileReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div><div class="field"><label>Receipt Font Size</label><select id="profileReceiptFontSize" onchange="previewReceiptFont(this.value)"><option value="10">10px</option><option value="11">11px</option><option value="12">12px</option><option value="13">13px</option><option value="14">14px</option><option value="15">15px</option><option value="16">16px</option><option value="17">17px</option><option value="18">18px</option></select></div>
     <div class="field" style="grid-column:1/-1"><label>Address</label><input id="profileAddress"></div>
     <div class="field" style="grid-column:1/-1"><label>Receipt Footer Note</label><input id="profileFooterNote"></div>
    </div>
@@ -76,13 +76,14 @@
   <button data-screen="expense" onclick="show('expense',this)">📒 &nbsp; Expense Ledger</button>
   <button data-screen="purchases" onclick="show('purchases',this)">＋ &nbsp; Purchases</button>
   <button data-screen="returns" onclick="show('returns',this)">↩ &nbsp; Sales Return</button>
+  <button data-screen="history" onclick="show('history',this)">🧾 &nbsp; Sales History</button>
   <button data-screen="reports" onclick="show('reports',this)">⌁ &nbsp; Reports</button>
   <button data-screen="settings" onclick="show('settings',this)">⚙ &nbsp; Settings</button>
   <button data-screen="admin" onclick="show('admin',this)">👑 &nbsp; Admin Panel</button>
  </nav>
 </aside>
 <main>
-<header class="top"><div><h1 id="pageTitle">WELCOME</h1><p id="currentDateHeader">SB POS SYSTEM · Friday, 28 August 2026</p></div><div class="user"><button class="btn soft" onclick="toggleDarkMode()" title="Dark Mode" style="margin-right:10px">🌙</button><button class="btn soft" onclick="exitImpersonation()" style="display:none; margin-right:10px;" id="adminBackBtn">← Exit Shop View</button><span class="sub" id="loggedInEmail" style="display:none">Admin</span><button class="avatar" id="avatarBtn" onclick="toggleProfileMenu()" style="border:0;cursor:pointer;font:inherit;padding:0">SC</button></div></header>
+<header class="top"><div><h1 id="pageTitle">WELCOME</h1><p id="currentDateHeader">SB POS SYSTEM · Friday, 28 August 2026</p></div><div class="user"><button class="btn soft bell-btn" id="adminBellBtn" onclick="toggleAdminNotifDrawer()" title="Notifications" style="display:none">🔔<span class="bell-badge" id="adminBellBadge" style="display:none">0</span></button><button class="btn soft" onclick="toggleDarkMode()" title="Dark Mode" style="margin-right:10px">🌙</button><button class="btn soft" onclick="exitImpersonation()" style="display:none; margin-right:10px;" id="adminBackBtn">← Exit Shop View</button><span class="sub" id="loggedInEmail" style="display:none">Admin</span><button class="avatar" id="avatarBtn" onclick="toggleProfileMenu()" style="border:0;cursor:pointer;font:inherit;padding:0">SC</button></div></header>
 
 <section id="dashboard" class="screen active">
  <div class="cards">
@@ -127,7 +128,7 @@
    <div class="field"><label>VAT %</label><input type="number" id="vatPercent" min="0" step="0.01" value="0" oninput="renderCart()"></div>
    <div class="totalrow"><span>VAT (<span id="vatPercentShow">0</span>%)</span><b id="vatShow">৳0</b></div>
    <div class="totalrow grand"><span>Total</span><b id="total">৳0</b></div>
-   <div class="field" style="margin-top:12px"><label>Customer (optional)</label><select id="posCustomer"><option>Walk-in Customer</option></select></div>
+   <div class="field" style="margin-top:12px"><label>Customer (optional)</label><div style="display:flex;gap:6px;align-items:stretch"><select id="posCustomer" style="flex:1"><option>Walk-in Customer</option></select><button type="button" class="btn soft" title="Add new customer" onclick="openAddCustomerFromPOS()">＋ Add</button></div></div>
    <div class="field"><label>Payment split</label><div class="formgrid" id="paymentFieldsGrid" style="grid-template-columns:repeat(2,1fr);gap:6px;margin-top:0"></div></div>
    <div class="paygrid" id="quickPayGrid" style="grid-template-columns:repeat(3,1fr)"></div>
    <div class="totalrow"><span>Paid</span><b id="paidShow">৳0</b></div>
@@ -137,28 +138,28 @@
  </div>
 </section>
 
-<section id="products" class="screen"><div class="panel"><div class="head"><h2>Products & Inventory</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn soft" onclick="openManageMeta()">🗂️ Categories/Brands/Units</button><button class="btn soft" onclick="downloadProductTemplate()">📄 Template</button><button class="btn soft" onclick="document.getElementById('excelImportInput').click()">📥 Excel/CSV Import</button><button class="btn soft" onclick="printAllBarcodeLabels()">🏷️ Print All Labels</button><button class="btn soft" onclick="openStockAdjustment()">⚖️ Adjust Stock</button><button class="btn soft" onclick="openStockAdjustmentHistory()">📋 Adjustment History</button><button class="btn primary" onclick="openAddProduct()">＋ Add Product</button></div></div><input type="file" id="excelImportInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)"><div class="toolbar"><input class="search" id="productSearch" oninput="filterProductsTable()" placeholder="🔍 Search products, SKU or barcode"></div><div class="tablewrap"><table class="table"><thead><tr><th>Product</th><th>SKU / Barcode</th><th>Purchase</th><th>Sell</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="productsTableBody"></tbody></table></div></div></section>
+<section id="products" class="screen"><div class="panel"><div class="head"><h2>Products & Inventory</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn soft" onclick="openManageMeta()">🗂️ Categories/Brands/Units</button><button class="btn soft" onclick="downloadProductTemplate()">📄 Template</button><button class="btn soft" onclick="exportProductsExcel()">📤 Export Excel</button><button class="btn soft" onclick="exportProductsCSV()">📤 Export CSV</button><button class="btn soft" onclick="document.getElementById('excelImportInput').click()">📥 Excel/CSV Import</button><button class="btn soft" onclick="printAllBarcodeLabels()">🏷️ Print All Labels</button><button class="btn soft" onclick="openStockAdjustment()">⚖️ Adjust Stock</button><button class="btn soft" onclick="openStockAdjustmentHistory()">📋 Adjustment History</button><button class="btn primary" onclick="openAddProduct()">＋ Add Product</button></div></div><input type="file" id="excelImportInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)"><div class="toolbar"><input class="search" id="productSearch" oninput="filterProductsTable()" placeholder="🔍 Search products, SKU or barcode"></div><div class="tablewrap"><table class="table"><thead><tr><th>Product</th><th>SKU / Barcode</th><th>Purchase</th><th>Sell</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="productsTableBody"></tbody></table></div></div></section>
 <section id="barcodePrint" class="screen">
+ <!-- Label settings are at the TOP so you never have to scroll past the product list -->
  <div class="panel">
-  <div class="head"><h2>Barcode Print</h2><button class="btn primary" onclick="previewAndPrintLabels()">🖨️ Preview / Print</button></div>
-  <div class="toolbar"><input class="search" id="labelProductSearch" oninput="filterLabelProductsTable()" placeholder="🔍 Search products, SKU or barcode"><button class="btn soft" onclick="toggleAllLabelProducts(true)">Select All</button><button class="btn soft" onclick="toggleAllLabelProducts(false)">Clear</button></div>
-  <div class="tablewrap"><table class="table"><thead><tr><th style="width:36px"></th><th>Product</th><th>SKU</th><th>Stock</th><th style="width:110px">Print Qty</th></tr></thead><tbody id="labelProductsTableBody"></tbody></table></div>
- </div>
- <div class="panel" style="margin-top:15px">
-  <div class="head"><h2>Information to show in Labels</h2></div>
-  <div class="rows" id="labelInfoFieldsRows"></div>
- </div>
- <div class="panel" style="margin-top:15px">
-  <div class="head"><h2>Barcode Setting</h2></div>
-  <div class="formgrid">
-   <div class="field"><label>Print Layout</label><select id="labelLayoutSelect">
+  <div class="head"><h2>🏷️ Barcode Print</h2><button class="btn primary" onclick="previewAndPrintLabels()">🖨️ Print Labels <span id="labelSelCount" class="admin-unread-pill" style="background:#fff;color:var(--green);display:none">0</span></button></div>
+  <div class="formgrid label-settings-grid">
+   <div class="field"><label>Print Layout</label><select id="labelLayoutSelect" onchange="saveLabelPrefs()">
      <option value="roll">Thermal Roll Printer (one label = one page)</option>
      <option value="a4">A4 Sheet (grid of labels per page)</option>
    </select></div>
-   <div class="field"><label>Label Size</label><select id="labelSizeSelect" onchange="labelSizeChanged()"></select></div>
-   <div class="field" id="labelCustomWidthWrap" style="display:none"><label>Custom Width (mm)</label><input type="number" id="labelCustomWidth" min="20" max="210" step="0.5" placeholder="e.g. 50"></div>
-   <div class="field" id="labelCustomHeightWrap" style="display:none"><label>Custom Height (mm)</label><input type="number" id="labelCustomHeight" min="15" max="297" step="0.5" placeholder="e.g. 25"></div>
+   <div class="field"><label>Label Size</label><select id="labelSizeSelect" onchange="labelSizeChanged(true)"></select></div>
+   <div class="field" id="labelCustomWidthWrap" style="display:none"><label>Custom Width (mm)</label><input type="number" id="labelCustomWidth" min="20" max="210" step="0.5" placeholder="e.g. 50" onchange="saveLabelPrefs()"></div>
+   <div class="field" id="labelCustomHeightWrap" style="display:none"><label>Custom Height (mm)</label><input type="number" id="labelCustomHeight" min="15" max="297" step="0.5" placeholder="e.g. 25" onchange="saveLabelPrefs()"></div>
+   <div class="field" id="labelSizeActionsWrap" style="display:none;align-self:end"><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn soft" id="labelSaveSizeBtn" style="display:none" onclick="saveCustomLabelSize()">💾 Save this size</button><button class="btn soft" id="labelDeleteSizeBtn" style="display:none" onclick="deleteSavedLabelSize()">🗑 Delete saved size</button></div></div>
   </div>
+  <div class="label-fields" id="labelInfoFieldsRows"></div>
+  <p class="sub" style="margin:10px 0 0">Saved sizes and options are remembered automatically. Tip: for the best scanning, keep the SKU short and use a 50×25 mm label or bigger.</p>
+ </div>
+ <div class="panel" style="margin-top:15px">
+  <div class="head"><h2>Select Products</h2></div>
+  <div class="toolbar"><input class="search" id="labelProductSearch" oninput="filterLabelProductsTable()" placeholder="🔍 Search products, SKU or barcode"><button class="btn soft" onclick="toggleAllLabelProducts(true)">Select All</button><button class="btn soft" onclick="toggleAllLabelProducts(false)">Clear</button></div>
+  <div class="tablewrap"><table class="table"><thead><tr><th style="width:36px"></th><th>Product</th><th>SKU</th><th>Stock</th><th style="width:110px">Print Qty</th></tr></thead><tbody id="labelProductsTableBody"></tbody></table></div>
  </div>
 </section>
 
@@ -210,7 +211,7 @@
 </div>
 <hr style="border:0;border-top:1px solid var(--line);margin:20px 0">
 <div class="head"><h2>Store Settings</h2></div>
-<div class="formgrid"><div class="field"><label>Store Name</label><input id="settingStoreName"></div><div class="field"><label>Owner Name</label><input id="settingOwnerName"></div><div class="field"><label>Phone</label><input id="settingPhone"></div><div class="field"><label>Receipt Size</label><select id="settingReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div><div class="field" style="grid-column:1/-1"><label>Address</label><input id="settingAddress"></div><div class="field" style="grid-column:1/-1"><label>Receipt Footer Note</label><input id="settingFooterNote"></div><div class="field"><label>Default VAT %</label><input id="settingVatPercent" type="number" min="0" step="0.01"></div></div>
+<div class="formgrid"><div class="field"><label>Store Name</label><input id="settingStoreName"></div><div class="field"><label>Owner Name</label><input id="settingOwnerName"></div><div class="field"><label>Phone</label><input id="settingPhone"></div><div class="field"><label>Receipt Size</label><select id="settingReceiptSize"><option>80mm Thermal</option><option>58mm Thermal</option></select></div><div class="field"><label>Receipt Font Size</label><select id="settingReceiptFontSize" onchange="previewReceiptFont(this.value)"><option value="10">10px</option><option value="11">11px</option><option value="12">12px</option><option value="13">13px</option><option value="14">14px</option><option value="15">15px</option><option value="16">16px</option><option value="17">17px</option><option value="18">18px</option></select></div><div class="field" style="grid-column:1/-1"><label>Address</label><input id="settingAddress"></div><div class="field" style="grid-column:1/-1"><label>Receipt Footer Note</label><input id="settingFooterNote"></div><div class="field"><label>Default VAT %</label><input id="settingVatPercent" type="number" min="0" step="0.01"></div></div>
 <hr style="border:0;border-top:1px solid var(--line);margin:20px 0">
 <div class="head"><h2>🧾 Invoice & POS Settings</h2></div>
 <div class="formgrid">
@@ -254,7 +255,7 @@
   <small class="sub">যখন চালু থাকবে, রিসিটের নিচে Owner Name দেখাবে</small>
  </div>
 </div>
-<div style="display:flex;gap:9px;margin-top:20px;flex-wrap:wrap"><button class="btn primary" onclick="saveSettings()">💾 Save Settings</button><button class="btn soft" onclick="exportJSONBackup()">💾 Backup JSON</button><button class="btn soft" onclick="document.getElementById('backupImportInput').click()">📥 Restore JSON</button><input type="file" id="backupImportInput" accept=".json" style="display:none" onchange="importJSONBackup(event)"><button class="btn soft" id="resetDataBtn" onclick="resetDemoData()">🗑️ Reset All Data &amp; Start Fresh</button></div></div><div><div class="panel"><div class="head"><h2>Users & Permissions</h2><button class="btn primary" id="addUserBtn" onclick="openAddUser()">＋ Add User</button></div><div class="rows" id="usersListRows"></div></div>
+<div style="display:flex;gap:9px;margin-top:20px;flex-wrap:wrap"><button class="btn primary" onclick="saveSettings()">💾 Save Settings</button><button class="btn soft" onclick="exportJSONBackup()">💾 Backup JSON</button><button class="btn soft" onclick="document.getElementById('backupImportInput').click()">📥 Restore JSON</button><input type="file" id="backupImportInput" accept=".json" style="display:none" onchange="importJSONBackup(event)"><button class="btn soft" onclick="removeAllProductImages()">🧹 Remove Product Images</button><button class="btn soft" onclick="document.getElementById('imageBackupInput').click()">↩️ Restore Images Backup</button><input type="file" id="imageBackupInput" accept=".json" style="display:none" onchange="restoreProductImagesBackup(event)"><button class="btn soft" id="resetDataBtn" onclick="resetDemoData()">🗑️ Reset All Data &amp; Start Fresh</button></div></div><div><div class="panel"><div class="head"><h2>Users & Permissions</h2><button class="btn primary" id="addUserBtn" onclick="openAddUser()">＋ Add User</button></div><div class="rows" id="usersListRows"></div></div>
 <div class="panel" style="margin-top:15px">
  <div class="head"><h2>💳 Payment Methods</h2>
   <button class="btn soft" onclick="openAddPaymentMethod()">＋ Add Method</button>
@@ -296,103 +297,120 @@
             <button onclick="changeCalendarMonth(1)">›</button>
         </div>
         <div class="cal-grid" id="calGrid"></div>
-        <button class="link" style="width:100%; margin-top:10px;" onclick="resetExpenseFilter()">Show Full Month</button>
+        <button class="link" style="width:100%; margin-top:10px;" onclick="resetExpenseFilter()">Show All</button>
     </div>
    </div>
-   <button class="btn soft" onclick="setExpenseMonth()">This Month</button>
+   <button class="btn soft" id="expAllBtn" onclick="setExpenseAll()">All</button><button class="btn soft" id="expMonthBtn" onclick="setExpenseMonth()">This Month</button>
   </div>
   <div class="cards" style="margin-bottom:15px">
-   <div class="card"><div class="label">Total Expense (Selected Month)</div><div class="num danger" id="expenseTotal">৳0</div></div>
+   <div class="card"><div class="label" id="expenseTotalLabel">Total Expense (All)</div><div class="num danger" id="expenseTotal">৳0</div></div>
   </div>
   <div id="expenseLedgerList" style="display:grid; gap:15px;"></div>
  </div>
 </section>
+<section id="history" class="screen">
+ <div class="panel">
+  <div class="head">
+   <h2>🧾 Sales History</h2>
+   <button class="btn danger-btn" id="historyDeleteAllBtn" onclick="deleteAllSalesHistory()">🗑️ Delete All History</button>
+  </div>
+  <div class="cards" style="margin-bottom:15px;grid-template-columns:repeat(3,1fr)">
+   <div class="card"><div class="label">Total Sales Records</div><div class="num" id="histCount">0</div></div>
+   <div class="card"><div class="label">Total Sales Amount</div><div class="num" id="histTotal">৳0</div></div>
+   <div class="card"><div class="label">Total Items Sold</div><div class="num" id="histItems">0</div></div>
+  </div>
+  <div class="toolbar"><input class="search" id="historySearch" oninput="renderSalesHistory(true)" placeholder="🔍 Search invoice, customer, product or date"></div>
+  <div class="tablewrap"><table class="table"><thead><tr><th>Date / Time</th><th>Invoice</th><th>Customer</th><th>Products Sold</th><th>Total</th><th>Paid</th><th>Due</th><th>Payment</th></tr></thead><tbody id="historyTableBody"></tbody></table></div>
+  <div style="text-align:center;margin-top:12px"><button class="btn soft" id="historyMoreBtn" style="display:none" onclick="renderSalesHistory(false)">Load more</button></div>
+ </div>
+</section>
+
 <section id="admin" class="screen">
-  <div class="panel">
-    <div class="head"><h2>👑 Super Admin Dashboard</h2></div>
-
-    <!-- ধাপ ৫: নোটিফিকেশন সিস্টেম -->
-    <div class="panel" style="margin-bottom:15px; background:#fff8e6; border:1px solid #ffeeba;">
-      <div class="head">
-        <h2 style="font-size:15px;">🔔 Admin Notifications</h2>
-        <button class="link" onclick="renderAdminNotifications()">Refresh</button>
+  <div class="admin-wrap">
+    <div class="admin-head">
+      <div>
+        <h2>👑 Super Admin Dashboard</h2>
+        <p class="sub" id="adminLastUpdated">All shops overview</p>
       </div>
-      <div class="rows" id="adminNotificationsList" style="max-height:250px; overflow-y:auto;">
-        Loading notifications...
+      <div class="admin-head-actions">
+        <button class="btn soft admin-btn" onclick="toggleAdminNotifDrawer()">🔔 Notifications <span class="admin-unread-pill" id="adminUnreadPill" style="display:none">0</span></button>
+        <button class="btn primary admin-btn" id="adminRefreshAllBtn" onclick="adminRefreshAll(this)"><span class="spin-ico">🔄</span> Refresh All</button>
       </div>
     </div>
 
-    <div class="cards" style="margin-bottom:15px">
-      <div class="card"><div class="label">Total Shops</div><div class="num" id="adminTotalShops">0</div></div>
-      <div class="card"><div class="label">Total Staff</div><div class="num" id="adminTotalStaff">0</div></div>
-      <div class="card"><div class="label">Total Invites</div><div class="num" id="adminTotalInvites">0</div></div>
-      <div class="card"><div class="label">🌍 Total Revenue (All Shops)</div><div class="num" id="adminTotalRevenue">৳0</div></div>
+    <div class="admin-stats">
+      <div class="admin-stat"><div class="ico-box s1">🏪</div><div><div class="label">Total Shops</div><div class="num" id="adminTotalShops">0</div></div></div>
+      <div class="admin-stat"><div class="ico-box s2">👥</div><div><div class="label">Total Staff</div><div class="num" id="adminTotalStaff">0</div></div></div>
+      <div class="admin-stat"><div class="ico-box s3">📨</div><div><div class="label">Total Invites</div><div class="num" id="adminTotalInvites">0</div></div></div>
+      <div class="admin-stat"><div class="ico-box s4">🌍</div><div><div class="label">Total Revenue (All Shops)</div><div class="num" id="adminTotalRevenue">৳0</div></div></div>
     </div>
 
-    <div class="toolbar">
+    <div class="admin-toolbar">
       <input class="search" id="adminSearch" oninput="onAdminFilterChange()" placeholder="🔍 Search by Shop Name or Owner Email...">
-      
-      <!-- নতুন ফিল্টার ড্রপডাউন -->
-      <select id="adminPlanFilter" onchange="onAdminFilterChange()" style="padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff">
+      <select id="adminPlanFilter" onchange="onAdminFilterChange()">
         <option value="">All Plans</option>
         <option value="Free">Free</option>
         <option value="Premium">Premium</option>
       </select>
-      
-      <select id="adminPaymentFilter" onchange="onAdminFilterChange()" style="padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff">
+      <select id="adminPaymentFilter" onchange="onAdminFilterChange()">
         <option value="">All Payments</option>
         <option value="Paid">Paid</option>
         <option value="Due">Due</option>
       </select>
-
-      <button class="btn soft" onclick="refreshAdminPanel()">🔄 Refresh</button>
-      <button class="btn soft" onclick="exportAdminCSV()">📥 Export CSV</button>
+      <button class="btn soft admin-btn" id="adminShopsRefreshBtn" onclick="adminRefreshShops(this)"><span class="spin-ico">🔄</span> Refresh</button>
+      <button class="btn soft admin-btn" onclick="exportAdminCSV()">📥 Export CSV</button>
     </div>
 
-    <!-- নতুন চার্ট সেকশন (কার্ডগুলোর নিচে, টেবিলের উপরে) -->
-    <div class="grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 15px;">
-      <div class="panel">
-        <div class="head"><h2>📈 Top Revenue Shops (Sales Chart)</h2></div>
+    <div class="admin-charts">
+      <div class="admin-card">
+        <div class="admin-card-head"><h3>📈 Top Revenue Shops</h3></div>
         <div id="adminTopShopsChart" style="display:flex; flex-direction:column; gap:10px;"></div>
       </div>
-      <div class="panel">
-        <div class="head"><h2>🔄 Shop Status (Pie Chart)</h2></div>
-        <div id="adminStatusChart" style="display:flex; align-items:center; gap:20px;"></div>
+      <div class="admin-card">
+        <div class="admin-card-head"><h3>🔄 Shop Status</h3></div>
+        <div id="adminStatusChart" style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;"></div>
       </div>
     </div>
 
-    <div class="tablewrap">
-      <table class="table">
-        <thead><tr>
-          <th>Shop Name</th>
-          <th>Owner Email</th>
-          <th>Status</th>
-          <th>Plan</th>
-          <th>Expiry Date</th>
-          <th>Payment</th>
-          <th>Products</th>
-          <th>Sales</th>
-          <th>Staff</th>
-          <th>Last Updated</th>
-          <th style="width:150px">Action</th>
-        </tr></thead>
-        <tbody id="adminShopsTableBody"></tbody>
-      </table>
+    <div class="admin-card">
+      <div class="admin-card-head"><h3>🏪 Shops</h3></div>
+      <div class="tablewrap">
+        <table class="table admin-table">
+          <thead><tr>
+            <th>Shop Name</th><th>Owner Email</th><th>Status</th><th>Plan</th><th>Expiry Date</th><th>Payment</th>
+            <th>Products</th><th>Sales</th><th>Staff</th><th>Last Updated</th><th style="width:150px">Action</th>
+          </tr></thead>
+          <tbody id="adminShopsTableBody"></tbody>
+        </table>
+      </div>
     </div>
 
-    <!-- ধাপ ৪: ইনভাইটস ও অ্যাক্টিভিটি লগ -->
-    <div class="grid" style="grid-template-columns: 1fr 1fr; margin-top: 15px;">
-      <div class="panel">
-        <div class="head"><h2>📨 Pending Invites</h2><button class="link" onclick="renderAdminInvites()">Refresh</button></div>
-        <div class="rows" id="adminInvitesList">Loading...</div>
+    <div class="admin-two">
+      <div class="admin-card">
+        <div class="admin-card-head"><h3>📨 Pending Invites</h3><button class="admin-mini-btn" id="adminInvitesRefreshBtn" onclick="adminRefreshInvites(this)"><span class="spin-ico">🔄</span> Refresh</button></div>
+        <div class="rows admin-scroll" id="adminInvitesList">Loading...</div>
       </div>
-      <div class="panel">
-        <div class="head"><h2>📜 Admin Activity Log</h2><button class="link" onclick="renderAdminLogs()">Refresh</button></div>
-        <div class="rows" id="adminActivityLogs" style="max-height:300px;overflow-y:auto;">Loading...</div>
+      <div class="admin-card">
+        <div class="admin-card-head"><h3>📜 Admin Activity Log</h3><button class="admin-mini-btn" id="adminLogsRefreshBtn" onclick="adminRefreshLogs(this)"><span class="spin-ico">🔄</span> Refresh</button></div>
+        <div class="rows admin-scroll" id="adminActivityLogs">Loading...</div>
       </div>
     </div>
   </div>
 </section>
+
+<!-- Admin notification drawer (opened from the bell icon in the header) -->
+<div id="adminNotifOverlay" class="notif-overlay" onclick="closeAdminNotifDrawer()"></div>
+<div id="adminNotifDrawer" class="notif-drawer" aria-hidden="true">
+  <div class="notif-head">
+    <div><h3>🔔 Notifications</h3><p class="sub" id="adminNotifSub">Loading…</p></div>
+    <div class="notif-head-actions">
+      <button class="admin-mini-btn" id="adminNotifRefreshBtn" onclick="adminRefreshNotifs(this)" title="Refresh"><span class="spin-ico">🔄</span></button>
+      <button class="admin-mini-btn" onclick="markAllAdminNotifsRead()" title="Mark all as read">✓ All read</button>
+      <button class="admin-mini-btn" onclick="closeAdminNotifDrawer()" title="Close">✕</button>
+    </div>
+  </div>
+  <div class="notif-body" id="adminNotificationsList">Loading notifications...</div>
+</div>
 
 </main>
 </div>
@@ -423,20 +441,6 @@
 <div class="modal" id="productFormModal"><div class="receiptWrap" style="width:640px;max-width:95vw;max-height:90vh;overflow-y:auto">
  <h2 id="productFormTitle" style="margin:0 0 14px;font-size:17px">Add New Product</h2>
  <div class="formgrid" style="grid-template-columns:1fr">
-  <div class="field">
-   <label>Product Photo</label>
-   <div style="display:flex;align-items:center;gap:12px">
-    <div id="pf_imagePreviewWrap" style="width:64px;height:64px;border-radius:12px;overflow:hidden;background:#f0ece3;display:flex;align-items:center;justify-content:center;flex:none;border:1px solid var(--line)">
-     <img id="pf_imagePreview" style="width:100%;height:100%;object-fit:cover;display:none">
-     <span id="pf_imagePlaceholder" style="font-size:26px">📦</span>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:6px">
-     <label for="pf_imageInput" class="btn soft" style="cursor:pointer;text-align:center;margin:0">Upload Photo</label>
-     <input type="file" id="pf_imageInput" accept="image/*" style="display:none" onchange="handleProductImageUpload(event)">
-     <button type="button" class="link danger" id="pf_imageRemoveBtn" style="display:none" onclick="removeProductImage()">Remove Photo</button>
-    </div>
-   </div>
-  </div>
  </div>
  <div class="formgrid">
   <div class="field"><label>Product Name</label><input id="pf_name" placeholder="Product name"></div>

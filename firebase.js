@@ -6,7 +6,7 @@ import {
   reauthenticateWithCredential, EmailAuthProvider, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, runTransaction
+  getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, runTransaction, orderBy, limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -138,6 +138,14 @@ window.Firebase = {
     const credential = EmailAuthProvider.credential(user.email, currentPassword);
     await reauthenticateWithCredential(user, credential);
     await updatePassword(user, newPassword);
+  },
+  // শুধু পাসওয়ার্ড সঠিক কিনা যাচাই (রি-অথেন্টিকেট) — Delete All History-এর আগে ব্যবহার হয়
+  async verifyPassword(password){
+    const user = auth.currentUser;
+    if(!user || !user.email) throw {code:'auth/no-current-user', message:'No logged-in user found.'};
+    const credential = EmailAuthProvider.credential(user.email, password);
+    await reauthenticateWithCredential(user, credential);
+    return true;
   },
   onAuthChange(cb){
     onAuthStateChanged(auth, cb);
@@ -423,11 +431,19 @@ window.Firebase = {
   },
 
   // ===== সুপার অ্যাডমিনের জন্য: অ্যাক্টিভিটি লগ পড়া =====
-  async getAdminLogs(){
-    const snap = await getDocs(collection(db, "adminLogs"));
+  async getAdminLogs(max){
+    // শুধু সাম্প্রতিক লগ পড়া (সব ডকুমেন্ট নয়) — Firestore read কমায়
+    const n = max || 60;
+    let snap;
+    try{
+      snap = await getDocs(query(collection(db, "adminLogs"), orderBy("timestamp", "desc"), limit(n)));
+    }catch(e){
+      console.warn("Ordered log query failed, falling back", e);
+      snap = await getDocs(collection(db, "adminLogs"));
+    }
     const logs = [];
-    snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
-    return logs.sort((a,b) => b.timestamp - a.timestamp); // নতুন লগ আগে দেখাবে
+    snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
+    return logs.sort((a,b) => (b.timestamp||0) - (a.timestamp||0)).slice(0, n);
   },
 
   // ===== সুপার অ্যাডমিন নোটিফিকেশন সিস্টেম =====
@@ -442,16 +458,33 @@ window.Firebase = {
       });
     } catch(e) { console.warn("Notification create failed", e); }
   },
-  async listAdminNotifications(){
-    const snap = await getDocs(collection(db, "adminNotifications"));
+  async listAdminNotifications(max){
+    const n = max || 100;
+    let snap;
+    try{
+      snap = await getDocs(query(collection(db, "adminNotifications"), orderBy("timestamp", "desc"), limit(n)));
+    }catch(e){
+      console.warn("Ordered notification query failed, falling back", e);
+      snap = await getDocs(collection(db, "adminNotifications"));
+    }
     const list = [];
     snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-    return list.sort((a,b) => b.timestamp - a.timestamp);
+    return list.sort((a,b) => (b.timestamp||0) - (a.timestamp||0)).slice(0, n);
+  },
+  // রিয়েল-টাইম: নতুন নোটিফিকেশন এলে সাথে সাথে callback চলে। unsubscribe ফাংশন রিটার্ন করে।
+  watchAdminNotifications(cb, onError, max){
+    const q = query(collection(db, "adminNotifications"), orderBy("timestamp", "desc"), limit(max || 100));
+    return onSnapshot(q, snap => {
+      const list = [];
+      snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+      cb(list);
+    }, err => { console.warn("Notification watch failed", err); if(onError) onError(err); });
   },
   async markAdminNotificationRead(id){
-    try {
-      await setDoc(doc(db, "adminNotifications", id), { isRead: true }, { merge: true });
-    } catch(e) { console.warn("Notification read failed", e); }
+    await setDoc(doc(db, "adminNotifications", id), { isRead: true }, { merge: true });
+  },
+  async markAllAdminNotificationsRead(ids){
+    await Promise.all((ids || []).map(id => setDoc(doc(db, "adminNotifications", id), { isRead: true }, { merge: true })));
   },
 
   // ===== Regular Admin Activity Log (ক্যাশিয়ার/স্টাফের অ্যাক্টিভিটি লগ) =====
