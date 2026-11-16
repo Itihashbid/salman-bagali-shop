@@ -751,3 +751,51 @@ body.dark .notif-item.danger:not(.read){ background:#3a2523; border-color:#5a353
 .btn.active-filter{ background:var(--green); color:#fff; }
 #history .table td{ vertical-align:top; }
 @media (max-width:760px){ #history .cards{ grid-template-columns:1fr !important; } }
+
+
+/* ================= SIDEBAR: scrolls when the screen is short ================= */
+aside{ display:flex; flex-direction:column; height:100vh; height:100dvh; box-sizing:border-box; overflow:hidden; }
+aside .brand{ flex:none; }
+aside nav{ flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding-bottom:12px; scrollbar-width:thin; scrollbar-color:#cfcac0 transparent; }
+aside nav::-webkit-scrollbar{ width:6px; }
+aside nav::-webkit-scrollbar-thumb{ background:#cfcac0; border-radius:6px; }
+@media (max-height:820px){ aside{ padding-top:14px; padding-bottom:8px; } .brand{ padding-bottom:12px; } nav button{ padding:9px 13px; } }
+.panel > .head{ flex-wrap:wrap; gap:10px; }
+
+/* ================= POS CART — bigger and clearer ================= */
+#cart{ max-height:44vh; overflow-y:auto; padding-right:2px; }
+.cart-count{ display:inline-block; min-width:24px; padding:2px 8px; border-radius:20px; background:var(--green); color:#fff; font-size:12px; font-weight:800; text-align:center; vertical-align:middle; }
+.cartline{ display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; padding:12px 10px; margin-bottom:8px; border:1px solid var(--line); border-radius:13px; background:var(--card); }
+.cl-name{ font-size:15px; font-weight:700; line-height:1.3; overflow-wrap:anywhere; }
+.cl-sub{ font-size:12.5px; color:var(--muted); margin-top:2px; }
+.cartline .qty{ gap:8px; }
+.cartline .qty button{ width:32px; height:32px; font-size:18px; font-weight:700; border-radius:9px; cursor:pointer; background:var(--card); color:var(--ink); }
+.cartline .qty button:hover{ background:#edf3ef; border-color:var(--green); }
+.cartline .qty b{ min-width:24px; text-align:center; font-size:16px; }
+.cl-total{ font-size:16px; font-weight:800; min-width:70px; text-align:right; }
+.cartline.flash{ animation:cartFlash 1.3s ease; }
+@keyframes cartFlash{ 0%{ background:#cfeadf; box-shadow:0 0 0 3px rgba(23,77,66,.35); transform:scale(1.02); } 100%{ background:var(--card); box-shadow:none; transform:none; } }
+body.dark .cartline .qty button:hover{ background:#2b2b2b; }
+
+/* ================= PRODUCTS: List / Small / Medium / Large boxes ================= */
+.view-switch{ display:inline-flex; gap:4px; padding:4px; border:1px solid var(--line); border-radius:12px; background:var(--card); flex:none; }
+.view-switch button{ border:0; background:none; padding:8px 12px; border-radius:9px; font-size:12.5px; font-weight:600; color:var(--muted); cursor:pointer; white-space:nowrap; }
+.view-switch button:hover{ background:#edf3ef; color:var(--green); }
+.view-switch button.active{ background:var(--green); color:#fff; }
+.pcard-grid{ display:grid; gap:12px; margin-top:6px; }
+.pcard-grid.pv-small{ grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); }
+.pcard-grid.pv-medium{ grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); }
+.pcard-grid.pv-large{ grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); }
+.pcard{ position:relative; display:flex; flex-direction:column; gap:6px; padding:13px; border:1px solid var(--line); border-radius:15px; background:var(--card); cursor:pointer; transition:transform .15s, box-shadow .2s, border-color .2s; min-width:0; }
+.pcard:hover{ transform:translateY(-2px); border-color:var(--green); box-shadow:0 10px 24px rgba(20,40,30,.10); }
+.pcard.low{ border-color:#efc9c5; }
+.pcard-ico{ line-height:1; }
+.pcard-name{ font-weight:700; font-size:14px; line-height:1.3; overflow-wrap:anywhere; }
+.pv-small .pcard-name{ font-size:12.5px; } .pv-large .pcard-name{ font-size:16px; }
+.pcard-sku{ font-size:11.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pcard-price{ font-weight:800; color:var(--green); font-size:15px; } .pv-large .pcard-price{ font-size:18px; }
+.pcard-meta{ font-size:12px; color:var(--muted); }
+.pcard-stock{ position:absolute; top:10px; right:10px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; }
+.pcard-stock.ok{ background:#e4f1ec; color:var(--green); } .pcard-stock.low{ background:#fbeceb; color:var(--red); }
+.pcard-actions{ display:flex; gap:12px; margin-top:6px; padding-top:8px; border-top:1px dashed var(--line); }
+body.dark .pcard-stock.ok{ background:#22302b; color:#9fd8c5; } body.dark .pcard-stock.low{ background:#3a2523; }

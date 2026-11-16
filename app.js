@@ -743,6 +743,7 @@ function addToCart(key){
       cost: +p.purchase || 0 // [নতুন] বিক্রির মুহূর্তের Purchase Price স্ন্যাপশট — পরে Purchase Price বদলালেও পুরনো বিক্রির Profit হিসাব সঠিক থাকবে
     });
   }
+  _cartFlashKey = key;
   renderCart();
 }
 function computeTotals(){
@@ -773,13 +774,30 @@ function getPaymentSplit(total){
   // cashAmt/bkashAmt kept for backward compatibility with any older code paths
   return {amounts, cashAmt:amounts.cash, bkashAmt:amounts.bkash, paid, due, overpaid};
 }
+let _cartFlashKey = null;
 function renderCart(){
   const box = document.getElementById('cart');
   if(!cart.length){
     box.innerHTML = '<div class="sub" style="padding:25px 0;text-align:center">Cart is empty<br>Select a product</div>';
   } else {
-    box.innerHTML = cart.map((x,i)=>`<div class="cartline"><div><b>${productIconHTML(x,16)} ${escapeHtml(x.name)}</b><div class="sub">${fmt(x.price)} × ${x.qty}</div>${x.discApplied > 0 ? `<div class="sub" style="color:var(--gold)">Auto Discount: -${fmt(x.discApplied)}</div>` : ''}${x.disc > 0 ? `<div class="sub" style="color:var(--red)">Discount: -${fmt(x.disc)}</div>` : ''}<div class="item-disc-btn" onclick="addDiscountToCart(${i})">${x.disc > 0 ? 'Edit Disc' : '+ Add Disc'}</div></div><div class="qty"><button onclick="changeQty(${i},-1)">−</button><b>${x.qty}</b><button onclick="changeQty(${i},1)">+</button></div><b>${fmt(x.price*x.qty - (x.disc||0))}</b></div>`).join('');
+    box.innerHTML = cart.map((x,i)=>`<div class="cartline${x.id===_cartFlashKey?' flash':''}" data-cid="${escapeHtml(String(x.id))}">
+      <div class="cl-main">
+        <div class="cl-name">${productIconHTML(x,20)} ${escapeHtml(x.name)}</div>
+        <div class="cl-sub">${fmt(x.price)} each</div>
+        ${x.discApplied > 0 ? `<div class="cl-sub" style="color:var(--gold)">Auto Discount: -${fmt(x.discApplied)}</div>` : ''}${x.disc > 0 ? `<div class="cl-sub" style="color:var(--red)">Discount: -${fmt(x.disc)}</div>` : ''}
+        <div class="item-disc-btn" onclick="addDiscountToCart(${i})">${x.disc > 0 ? 'Edit Disc' : '+ Add Disc'}</div>
+      </div>
+      <div class="qty"><button onclick="changeQty(${i},-1)">−</button><b>${x.qty}</b><button onclick="changeQty(${i},1)">+</button></div>
+      <div class="cl-total">${fmt(x.price*x.qty - (x.disc||0))}</div>
+    </div>`).join('');
+    if(_cartFlashKey){
+      const fl = box.querySelector('.cartline.flash');
+      if(fl) fl.scrollIntoView({block:'nearest', behavior:'smooth'});
+      _cartFlashKey = null;
+    }
   }
+  const cc = document.getElementById('cartCount');
+  if(cc){ const n = cart.reduce((a,x)=>a+x.qty,0); cc.textContent = n; cc.style.display = n ? '' : 'none'; }
   const t = computeTotals();
   applyAutoFullPayment(t.total);
   setText('subtotal', fmt(t.subtotal));
@@ -809,7 +827,7 @@ function changeQty(i,d){
   const p = findSellable(cart[i].id);
   if(d>0 && p && cart[i].qty>=p.stock){ showAlertDialog('Cannot add more than available stock.', {icon:'📦'}); return; }
   cart[i].qty += d;
-  if(cart[i].qty<=0) cart.splice(i,1);
+  if(cart[i].qty<=0) cart.splice(i,1); else _cartFlashKey = cart[i].id;
   renderCart();
 }
 function filterProducts(){
@@ -1210,6 +1228,18 @@ function adjustStock(key, delta){
 function renderProductsTable(){
   const body = document.getElementById('productsTableBody');
   if(!body) return;
+  const view = getProductView();
+  const wrap = document.getElementById('productsTableWrap'), grid = document.getElementById('productsCardGrid');
+  document.querySelectorAll('#productViewSwitch button').forEach(b=>b.classList.toggle('active', b.dataset.view === view));
+  if(view !== 'list'){
+    if(wrap) wrap.style.display = 'none';
+    if(grid) grid.style.display = '';
+    renderProductCards();
+    const q0 = document.getElementById('productSearch'); if(q0 && q0.value) filterProductsTable();
+    return;
+  }
+  if(wrap) wrap.style.display = '';
+  if(grid) grid.style.display = 'none';
   body.innerHTML = state.products.map(p=>{
     const isVariable = p.productType==='variable' && Array.isArray(p.variations) && p.variations.length;
     const totalStock = isVariable ? p.variations.reduce((a,v)=>a+(+v.stock||0),0) : p.stock;
@@ -1231,6 +1261,47 @@ function filterProductsTable(){
   document.querySelectorAll('#productsTableBody tr').forEach(tr=>{
     tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
   });
+  document.querySelectorAll('#productsCardGrid .pcard').forEach(card=>{
+    card.style.display = (card.dataset.search || '').includes(q) ? '' : 'none';
+  });
+}
+/* ---- Products view: List / Small / Medium / Large boxes (remembered in settings) ---- */
+function getProductView(){
+  const v = state && state.settings && state.settings.productView;
+  return ['list','small','medium','large'].includes(v) ? v : 'list';
+}
+function setProductView(v){
+  if(!['list','small','medium','large'].includes(v)) return;
+  if(!isImpersonating && state && state.settings){ state.settings.productView = v; save(); }
+  renderProductsTable();
+}
+function renderProductCards(){
+  const grid = document.getElementById('productsCardGrid');
+  if(!grid) return;
+  const view = getProductView();
+  grid.className = 'pcard-grid pv-' + view;
+  grid.innerHTML = state.products.map(p=>{
+    const isVariable = p.productType==='variable' && Array.isArray(p.variations) && p.variations.length;
+    const totalStock = isVariable ? p.variations.reduce((a,v)=>a+(+v.stock||0),0) : p.stock;
+    const low = (p.lowStockAlert!==undefined && p.lowStockAlert!==null) ? p.lowStockAlert : 5;
+    const isLow = totalStock <= low;
+    const sell = isVariable ? (fmt(Math.min(...p.variations.map(v=>+v.sell||0))) + '–' + fmt(Math.max(...p.variations.map(v=>+v.sell||0)))) : fmt(p.sell);
+    const purchase = isVariable ? '' : fmt(p.purchase);
+    const meta = [p.category, p.brand, p.unit].filter(Boolean).join(' · ');
+    const search = escapeHtml((p.name + ' ' + (p.sku||'') + ' ' + meta).toLowerCase());
+    return `<div class="pcard${isLow?' low':''}" data-search="${search}" onclick="openEditProduct('${escapeJsAttr(p.id)}')" title="Click to edit">
+      <div class="pcard-ico">${productIconHTML(p, view==='large'?54:(view==='medium'?40:30))}</div>
+      <div class="pcard-body">
+        <div class="pcard-name">${escapeHtml(p.name)}</div>
+        <div class="pcard-sku">${isVariable ? p.variations.length + ' variants' : escapeHtml(p.sku||'')}</div>
+        <div class="pcard-price">${sell}</div>
+        ${view!=='small' ? `<div class="pcard-meta">${purchase ? 'Buy ' + purchase + ' · ' : ''}Stock <b>${totalStock}</b></div>` : ''}
+        ${view==='large' && meta ? `<div class="pcard-meta">${escapeHtml(meta)}</div>` : ''}
+      </div>
+      <div class="pcard-stock ${isLow?'low':'ok'}">${view==='small' ? totalStock : (isLow ? 'Low stock' : 'In stock')}</div>
+      ${view==='large' ? `<div class="pcard-actions" onclick="event.stopPropagation()"><button class="link" onclick="openEditProduct('${escapeJsAttr(p.id)}')">Edit</button><button class="link" onclick="printBarcodeLabel('${escapeJsAttr(p.id)}')">🏷️ Label</button><button class="link danger" onclick="deleteProduct('${escapeJsAttr(p.id)}')">Delete</button></div>` : ''}
+    </div>`;
+  }).join('') || '<div class="sub" style="padding:20px">No products yet.</div>';
 }
 let _editingProductId = null;
 let _variationRowSeq = 0;
@@ -1286,7 +1357,46 @@ function productTypeChanged(){
   document.getElementById('pf_simpleSection').style.display = type==='variable' ? 'none' : 'block';
   document.getElementById('pf_variableSection').style.display = type==='variable' ? 'block' : 'none';
 }
-function addVariationRow(data){
+function getVariantCode(){
+  const el = document.getElementById('pf_variantCode');
+  return el ? el.value.trim().replace(/\s+/g,'').toUpperCase() : '';
+}
+// কোড থাকলে CODE-ভ্যালু, না থাকলে শুধু ভ্যালু
+function variantSkuFor(value){
+  const v = String(value||'').trim();
+  if(!v) return '';
+  const code = getVariantCode();
+  return code ? (code + '-' + v) : v;
+}
+// প্রোডাক্টের নামের ইংরেজি অংশ থেকে ছোট কোডের প্রস্তাব (বাংলা নাম হলে ফাঁকা)
+function suggestVariantCode(name){
+  const words = String(name||'').split(/\s+/);
+  for(const w of words){
+    const t = w.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+    if(t.length >= 2) return t.slice(0,5);
+  }
+  return '';
+}
+function productNameTyped(){
+  const codeEl = document.getElementById('pf_variantCode');
+  if(!codeEl || codeEl.dataset.touched === '1') return;
+  codeEl.value = suggestVariantCode(document.getElementById('pf_name').value);
+  variantCodeChanged(false);
+}
+// কোড বদলালে যেসব SKU নিজে হাতে বদলানো হয়নি সেগুলো নতুন কোডসহ আপডেট হয়
+function variantCodeChanged(byUser){
+  const codeEl = document.getElementById('pf_variantCode');
+  if(byUser && codeEl) codeEl.dataset.touched = '1';
+  document.querySelectorAll('#pf_variationRows tr').forEach(tr=>{
+    const valEl = tr.querySelector('[data-f="value"]'), skuEl = tr.querySelector('[data-f="sku"]');
+    const cur = (skuEl.value||'').trim();
+    if(!cur || cur === tr.dataset.autoSku){
+      const n = variantSkuFor(valEl.value);
+      skuEl.value = n; tr.dataset.autoSku = n;
+    }
+  });
+}
+function addVariationRow(data, opts){
   data = data || {value:'', sku:'', purchase:0, sell:0, stock:0};
   const rowId = 'vr' + (++_variationRowSeq);
   const tbody = document.getElementById('pf_variationRows');
@@ -1294,27 +1404,74 @@ function addVariationRow(data){
   tr.id = rowId;
   // [ফিক্স #2.1] পুরনো variation ID ধরে রাখা — নইলে এডিটে সব ID বদলে পুরনো সেলের রিটার্নে স্টক ফেরত যেত না
   tr.dataset.vid = data.id || uid();
+  // Value-ই সাধারণত SKU — SKU খালি থাকলে নিজে থেকে Value বসে যায়
+  const value = data.value || '';
+  const sku = (data.sku && String(data.sku).trim()) ? data.sku : variantSkuFor(value);
+  tr.dataset.autoSku = (sku === value || sku === variantSkuFor(value)) ? sku : '';
+  const st = 'padding:8px;border:1px solid var(--line);border-radius:8px;box-sizing:border-box';
   tr.innerHTML = `
-    <td><input data-f="value" value="${escapeHtml(data.value)}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px"></td>
-    <td><input data-f="sku" value="${escapeHtml(data.sku)}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px"></td>
-    <td><input data-f="purchase" type="number" value="${data.purchase}" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px"></td>
-    <td><input data-f="sell" type="number" value="${data.sell}" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px"></td>
-    <td><input data-f="stock" type="number" value="${data.stock}" style="width:70px;padding:8px;border:1px solid var(--line);border-radius:8px"></td>
-    <td><button type="button" class="link danger" onclick="document.getElementById('${rowId}').remove()">✕</button></td>`;
+    <td style="width:44px"><button type="button" class="link danger" title="Remove this variant" onclick="removeVariationRow('${rowId}')" style="font-size:16px">🗑</button></td>
+    <td><input data-f="value" value="${escapeHtml(value)}" oninput="variationValueChanged(this)" placeholder="e.g. 16cm" style="width:100%;min-width:90px;${st}"></td>
+    <td><input data-f="sku" value="${escapeHtml(sku)}" style="width:100%;min-width:100px;${st}"></td>
+    <td><input data-f="purchase" type="number" value="${data.purchase}" style="width:80px;${st}"></td>
+    <td><input data-f="sell" type="number" value="${data.sell}" style="width:80px;${st}"></td>
+    <td><input data-f="stock" type="number" value="${data.stock}" style="width:70px;${st}"></td>`;
   tbody.appendChild(tr);
+  return tr;
 }
+// Value বদলালে, SKU যদি নিজে হাতে বদলানো না হয়ে থাকে তবে SKU-ও সাথে সাথে বদলে যায়
+function variationValueChanged(inp){
+  const tr = inp.closest('tr');
+  if(!tr) return;
+  const skuEl = tr.querySelector('[data-f="sku"]');
+  const cur = (skuEl.value || '').trim();
+  if(!cur || cur === tr.dataset.autoSku){
+    const n = variantSkuFor(inp.value);
+    skuEl.value = n;
+    tr.dataset.autoSku = n;
+  }
+}
+async function removeVariationRow(rowId){
+  const tr = document.getElementById(rowId);
+  if(!tr) return;
+  const val = tr.querySelector('[data-f="value"]').value.trim();
+  const stock = +tr.querySelector('[data-f="stock"]').value || 0;
+  if(val && stock > 0){
+    const ok = await showConfirmDialog(`Remove variant "${val}" (stock ${stock})? It is removed when you press Save.`, {danger:true, title:'Remove Variant'});
+    if(!ok) return;
+  }
+  tr.remove();
+}
+// নতুন ভ্যালুগুলো পুরনো সারির নিচে যোগ হয় — আগের কোনো ভ্যারিয়েন্ট মোছে না, একই ভ্যালু দ্বিতীয়বার আসে না
 function generateVariationRows(){
-  const raw = document.getElementById('pf_variationValues').value || '';
+  const inputEl = document.getElementById('pf_variationValues');
+  const raw = inputEl.value || '';
   const values = raw.split(',').map(s=>s.trim()).filter(Boolean);
   if(!values.length){ showAlertDialog('Enter at least one variation value, comma-separated (e.g. 100gm,150gm,200gm).'); return; }
-  document.getElementById('pf_variationRows').innerHTML = '';
-  values.forEach(v=>addVariationRow({value:v, sku:'', purchase:0, sell:0, stock:0}));
+  const existing = new Set([...document.querySelectorAll('#pf_variationRows [data-f="value"]')].map(i=>i.value.trim().toLowerCase()));
+  let added = 0, skipped = 0, lastRow = null;
+  values.forEach(v=>{
+    const k = v.toLowerCase();
+    if(existing.has(k)){ skipped++; return; }
+    existing.add(k);
+    lastRow = addVariationRow({value:v, sku:variantSkuFor(v), purchase:0, sell:0, stock:0});
+    added++;
+  });
+  inputEl.value = '';
+  if(lastRow) lastRow.scrollIntoView({block:'nearest'});
+  if(skipped) showToast(`${added} added, ${skipped} already existed`, added ? 'success' : 'warning');
+}
+function addSingleVariationRow(){
+  const tr = addVariationRow({value:'', sku:'', purchase:0, sell:0, stock:0});
+  const f = tr.querySelector('[data-f="value"]');
+  if(f) f.focus();
+  tr.scrollIntoView({block:'nearest'});
 }
 function readVariationRows(){
   const rows = [...document.querySelectorAll('#pf_variationRows tr')];
   return rows.map(tr=>{
     const get = f=>tr.querySelector(`[data-f="${f}"]`).value;
-    return {id: tr.dataset.vid || uid(), value:get('value').trim(), sku:get('sku').trim(), purchase:+get('purchase')||0, sell:+get('sell')||0, stock:+get('stock')||0};
+    return {id: tr.dataset.vid || uid(), value:get('value').trim(), sku:(get('sku').trim() || variantSkuFor(get('value'))), purchase:+get('purchase')||0, sell:+get('sell')||0, stock:+get('stock')||0};
   }).filter(v=>v.value);
 }
 function openAddProduct(){
@@ -1331,6 +1488,7 @@ function openAddProduct(){
   if(document.getElementById('pf_autoDiscValue')) document.getElementById('pf_autoDiscValue').value = 0;
   document.getElementById('pf_variationValues').value = '';
   document.getElementById('pf_variationRows').innerHTML = '';
+  { const ce = document.getElementById('pf_variantCode'); if(ce){ ce.value = ''; ce.dataset.touched = ''; } }
   document.getElementById('pf_type').value = 'simple';
   fillMetaSelect('pf_category', 'categories', '');
   fillMetaSelect('pf_brand', 'brands', '');
@@ -1355,6 +1513,7 @@ function openEditProduct(id){
   if(document.getElementById('pf_autoDiscValue')) document.getElementById('pf_autoDiscValue').value = p.autoDiscountValue || 0;
   document.getElementById('pf_variationValues').value = '';
   document.getElementById('pf_variationRows').innerHTML = '';
+  { const ce = document.getElementById('pf_variantCode'); if(ce){ ce.value = p.variantCode || ''; ce.dataset.touched = '1'; } } // পুরনো প্রোডাক্টে কোড নিজে থেকে বদলায় না
   if(p.productType==='variable' && Array.isArray(p.variations)){
     p.variations.forEach(v=>addVariationRow(v));
   }
@@ -1377,7 +1536,7 @@ function closeProductFormModal(savedProductId, productType){
     populatePurchaseFormModal(restore);
   }
 }
-function saveProductForm(){
+async function saveProductForm(){
   const name = document.getElementById('pf_name').value.trim();
   if(!name){ showAlertDialog('Please enter the product name.'); return; }
   const type = document.getElementById('pf_type').value;
@@ -1393,6 +1552,7 @@ function saveProductForm(){
     const variations = readVariationRows();
     if(!variations.length){ showAlertDialog('Add at least one variation row (or use Generate Rows).'); return; }
     payload.variations = variations;
+    payload.variantCode = getVariantCode();
     payload.sku = payload.sku || '';
     payload.purchase = 0; payload.sell = 0; payload.stock = 0;
   } else {
@@ -1402,6 +1562,19 @@ function saveProductForm(){
     payload.sell = +document.getElementById('pf_sell').value || 0;
     payload.stock = +document.getElementById('pf_stock').value || 0;
     payload.variations = [];
+  }
+  // একই SKU আরেক প্রোডাক্টে (বা এই প্রোডাক্টেই দুইবার) থাকলে স্ক্যানে ভুল পণ্য ধরা পড়ে — আগে সতর্ক করা
+  const mySkus = (type==='variable') ? payload.variations.map(v=>v.sku) : [payload.sku];
+  const seen = new Set(), dups = [];
+  mySkus.forEach(k=>{ const l = String(k||'').toLowerCase(); if(!l) return; if(seen.has(l)) dups.push(k); seen.add(l); });
+  state.products.forEach(o=>{
+    if(o.id === _editingProductId) return;
+    const others = (o.productType==='variable' && Array.isArray(o.variations) && o.variations.length) ? o.variations.map(v=>v.sku) : [o.sku];
+    others.forEach(k=>{ const l = String(k||'').toLowerCase(); if(l && seen.has(l) && !dups.includes(k)) dups.push(k); });
+  });
+  if(dups.length){
+    const ok = await showConfirmDialog(`These SKUs already exist: ${dups.slice(0,6).join(', ')}${dups.length>6?' …':''}. Barcode scanning may pick the wrong product. Tip: add a Product Code (e.g. KIAM) to make them unique. Save anyway?`, {icon:'⚠️', title:'Duplicate SKU', okLabel:'Save anyway'});
+    if(!ok) return;
   }
   let newId;
   if(_editingProductId){
@@ -5429,6 +5602,7 @@ function renderSalesHistory(reset){
   const all = (state.sales || []);
   const list = _histFiltered();
   _histShown = Math.min(list.length, _histShown + HIST_PAGE);
+  const canDel = (currentRole === 'Admin' && !isImpersonating);
   const rows = list.slice(0, _histShown).map(x=>{
     const items = (x.items||[]).map(i=>`${escapeHtml(i.name)} ×${i.qty}`).join(', ');
     const paid = (typeof x.paid === 'object' && x.paid) ? Object.values(x.paid).reduce((a,v)=>a+(+v||0),0) : (+x.paid||0);
@@ -5441,9 +5615,10 @@ function renderSalesHistory(reset){
       <td>${fmt(paid)}</td>
       <td class="${(x.due||0)>0?'danger':''}">${fmt(x.due||0)}</td>
       <td><span class="pill">${escapeHtml(x.payment||'')}</span></td>
+      <td>${canDel ? `<button class="link danger" onclick="deleteSaleHistory('${escapeJsAttr(x.invoice)}')">🗑 Delete</button>` : ''}</td>
     </tr>`;
   }).join('');
-  body.innerHTML = rows || '<tr><td colspan="8" class="sub" style="text-align:center;padding:24px 0">No sales history yet.</td></tr>';
+  body.innerHTML = rows || '<tr><td colspan="9" class="sub" style="text-align:center;padding:24px 0">No sales history yet.</td></tr>';
   const more = document.getElementById('historyMoreBtn');
   if(more){
     more.style.display = _histShown < list.length ? '' : 'none';
@@ -5459,6 +5634,50 @@ function _isSalesCashEntry(c){
   const d = String((c && c.desc) || '');
   return !!c && (/^Sale /.test(d) || /^Due Collection/.test(d) || c.category === 'Return Refund' || /^Return Refund/.test(d));
 }
+// দোকানের লগইন পাসওয়ার্ড চেয়ে যাচাই করে — সঠিক হলে true
+async function confirmShopPassword(){
+  const pw = await showPromptDialog('Enter your shop login password to confirm.', '', {icon:'🔐', title:'Password Required', type:'password', okLabel:'Confirm'});
+  if(pw === null) return false;
+  if(!pw){ showAlertDialog('Password is required.', {icon:'⚠️'}); return false; }
+  try{
+    await window.Firebase.verifyPassword(pw);
+    return true;
+  }catch(e){
+    const code = (e && e.code) || '';
+    const msg = (code === 'auth/too-many-requests') ? 'Too many attempts. Please wait a while and try again.' : 'Wrong password. Nothing was deleted.';
+    showAlertDialog(msg, {icon:'❌', title:'Not Deleted'});
+    return false;
+  }
+}
+// একটি নির্দিষ্ট বিক্রির হিস্টরি ডিলিট (পাসওয়ার্ড লাগবে)
+async function deleteSaleHistory(invoice){
+  if(isImpersonating){ showAlertDialog('Not available in shop-view mode.', {icon:'🚫'}); return; }
+  if(currentRole !== 'Admin'){ showAlertDialog('Only the shop owner can delete history.', {icon:'🚫'}); return; }
+  const sale = (state.sales||[]).find(x=>x.invoice === invoice);
+  if(!sale) return;
+  const ok = await showConfirmDialog(
+    `Delete sale ${invoice} (${fmt(sale.total||0)}) and its accounts (cash entries, due ledger rows, returns)? The customer's totals and due will be adjusted. Stock is not changed. This cannot be undone.`,
+    {danger:true, icon:'🗑️', title:'Delete This Sale', okLabel:'Continue'});
+  if(!ok) return;
+  if(!(await confirmShopPassword())) return;
+  state.sales = state.sales.filter(x=>x !== sale);
+  state.returns = (state.returns||[]).filter(r=>r.invoice !== invoice);
+  state.ledger = (state.ledger||[]).filter(l=>l.invoice !== invoice);
+  state.cash = (state.cash||[]).filter(cn => {
+    const d = String(cn.desc||'');
+    return !(d.startsWith('Sale ' + invoice + ' (') || d.startsWith('Return Refund ' + invoice + ' ('));
+  });
+  const cust = (state.customers||[]).find(x=>x.name === sale.customer);
+  if(cust){
+    cust.totalPurchase = Math.max(0, (+cust.totalPurchase||0) - (+sale.total||0));
+    cust.due = Math.max(0, (+cust.due||0) - (+sale.due||0));
+  }
+  save();
+  logRegularAction('Sale History Deleted', 'Invoice: ' + invoice);
+  renderAll();
+  renderSalesHistory(true);
+  showToast('✅ Sale ' + invoice + ' deleted');
+}
 async function deleteAllSalesHistory(){
   if(isImpersonating){ showAlertDialog('Not available in shop-view mode.', {icon:'🚫'}); return; }
   if(currentRole !== 'Admin'){ showAlertDialog('Only the shop owner can delete the history.', {icon:'🚫'}); return; }
@@ -5467,17 +5686,7 @@ async function deleteAllSalesHistory(){
     `ALL sales history (${state.sales.length} sales) will be deleted together with its accounts: sales-linked cash entries, due ledger, sales returns, and customers' purchase totals / dues / points. Products, stock, purchases and expenses are NOT touched. A backup file is downloaded first. This cannot be undone.`,
     {danger:true, icon:'🗑️', title:'Delete All History', okLabel:'Continue'});
   if(!ok) return;
-  const pw = await showPromptDialog('Enter your shop login password to confirm.', '', {icon:'🔐', title:'Password Required', type:'password', okLabel:'Delete All'});
-  if(pw === null) return;
-  if(!pw){ showAlertDialog('Password is required.', {icon:'⚠️'}); return; }
-  try{
-    await window.Firebase.verifyPassword(pw);
-  }catch(e){
-    const code = (e && e.code) || '';
-    const msg = (code === 'auth/too-many-requests') ? 'Too many attempts. Please wait a while and try again.' : 'Wrong password. History was NOT deleted.';
-    showAlertDialog(msg, {icon:'❌', title:'Not Deleted'});
-    return;
-  }
+  if(!(await confirmShopPassword())) return;
   // backup first (safety), then erase
   try{
     _downloadTextFile('sales_history_backup_' + todayStr() + '.json', JSON.stringify({

@@ -121,7 +121,7 @@
   <div class="panel"><div class="head"><h2>New Sale · POS Billing</h2><span class="pill">Register #01</span></div><div class="toolbar"><input class="search" id="search" oninput="filterProducts()" onkeydown="handleScanEnter(event)" placeholder="🔍 Search product or scan barcode (scan then press Enter)..."><button class="btn soft" id="cameraScanBtn" onclick="openCameraScanner()" title="Scan barcode with camera">📷 Scan</button></div>
    <div class="products" id="productGrid"></div>
   </div>
-  <div class="panel cart"><div class="head"><h2>Current Cart</h2><button class="link" onclick="cart=[];renderCart()">Clear</button></div><div id="cart"></div><div style="display:flex;gap:8px;margin:10px 0"><button class="btn soft" style="flex:1" onclick="holdCurrentOrder()">📌 Hold Order</button><button class="btn soft" style="flex:1" onclick="openHeldOrdersModal()">📂 Held Orders</button></div><div class="totalbox">
+  <div class="panel cart"><div class="head"><h2>Current Cart <span id="cartCount" class="cart-count" style="display:none">0</span></h2><button class="link" onclick="cart=[];renderCart()">Clear</button></div><div id="cart"></div><div style="display:flex;gap:8px;margin:10px 0"><button class="btn soft" style="flex:1" onclick="holdCurrentOrder()">📌 Hold Order</button><button class="btn soft" style="flex:1" onclick="openHeldOrdersModal()">📂 Held Orders</button></div><div class="totalbox">
    <div class="totalrow"><span>Subtotal</span><b id="subtotal">৳0</b></div>
    <div class="field"><label>Discount</label><div class="inline2"><input type="number" id="discountValue" min="0" value="0" oninput="renderCart()"><select id="discountType" onchange="renderCart()"><option value="amount">৳ Flat</option><option value="percent">% Percent</option></select></div></div>
    <div class="totalrow"><span>Discount</span><b id="discountShow" class="danger">− ৳0</b></div>
@@ -138,7 +138,7 @@
  </div>
 </section>
 
-<section id="products" class="screen"><div class="panel"><div class="head"><h2>Products & Inventory</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn soft" onclick="openManageMeta()">🗂️ Categories/Brands/Units</button><button class="btn soft" onclick="downloadProductTemplate()">📄 Template</button><button class="btn soft" onclick="exportProductsExcel()">📤 Export Excel</button><button class="btn soft" onclick="exportProductsCSV()">📤 Export CSV</button><button class="btn soft" onclick="document.getElementById('excelImportInput').click()">📥 Excel/CSV Import</button><button class="btn soft" onclick="printAllBarcodeLabels()">🏷️ Print All Labels</button><button class="btn soft" onclick="openStockAdjustment()">⚖️ Adjust Stock</button><button class="btn soft" onclick="openStockAdjustmentHistory()">📋 Adjustment History</button><button class="btn primary" onclick="openAddProduct()">＋ Add Product</button></div></div><input type="file" id="excelImportInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)"><div class="toolbar"><input class="search" id="productSearch" oninput="filterProductsTable()" placeholder="🔍 Search products, SKU or barcode"></div><div class="tablewrap"><table class="table"><thead><tr><th>Product</th><th>SKU / Barcode</th><th>Purchase</th><th>Sell</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="productsTableBody"></tbody></table></div></div></section>
+<section id="products" class="screen"><div class="panel"><div class="head"><h2>Products & Inventory</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn soft" onclick="openManageMeta()">🗂️ Categories/Brands/Units</button><button class="btn soft" onclick="downloadProductTemplate()">📄 Template</button><button class="btn soft" onclick="exportProductsExcel()">📤 Export Excel</button><button class="btn soft" onclick="exportProductsCSV()">📤 Export CSV</button><button class="btn soft" onclick="document.getElementById('excelImportInput').click()">📥 Excel/CSV Import</button><button class="btn soft" onclick="printAllBarcodeLabels()">🏷️ Print All Labels</button><button class="btn soft" onclick="openStockAdjustment()">⚖️ Adjust Stock</button><button class="btn soft" onclick="openStockAdjustmentHistory()">📋 Adjustment History</button><button class="btn primary" onclick="openAddProduct()">＋ Add Product</button></div></div><input type="file" id="excelImportInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelImport(event)"><div class="toolbar"><input class="search" id="productSearch" oninput="filterProductsTable()" placeholder="🔍 Search products, SKU or barcode"><div class="view-switch" id="productViewSwitch"><button data-view="list" onclick="setProductView('list')" title="List">☰ List</button><button data-view="small" onclick="setProductView('small')" title="Small boxes">▪ Small</button><button data-view="medium" onclick="setProductView('medium')" title="Medium boxes">▦ Medium</button><button data-view="large" onclick="setProductView('large')" title="Large boxes">■ Large</button></div></div><div id="productsCardGrid" class="pcard-grid" style="display:none"></div><div class="tablewrap" id="productsTableWrap"><table class="table"><thead><tr><th>Product</th><th>SKU / Barcode</th><th>Purchase</th><th>Sell</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="productsTableBody"></tbody></table></div></div></section>
 <section id="barcodePrint" class="screen">
  <!-- Label settings are at the TOP so you never have to scroll past the product list -->
  <div class="panel">
@@ -320,7 +320,7 @@
    <div class="card"><div class="label">Total Items Sold</div><div class="num" id="histItems">0</div></div>
   </div>
   <div class="toolbar"><input class="search" id="historySearch" oninput="renderSalesHistory(true)" placeholder="🔍 Search invoice, customer, product or date"></div>
-  <div class="tablewrap"><table class="table"><thead><tr><th>Date / Time</th><th>Invoice</th><th>Customer</th><th>Products Sold</th><th>Total</th><th>Paid</th><th>Due</th><th>Payment</th></tr></thead><tbody id="historyTableBody"></tbody></table></div>
+  <div class="tablewrap"><table class="table"><thead><tr><th>Date / Time</th><th>Invoice</th><th>Customer</th><th>Products Sold</th><th>Total</th><th>Paid</th><th>Due</th><th>Payment</th><th></th></tr></thead><tbody id="historyTableBody"></tbody></table></div>
   <div style="text-align:center;margin-top:12px"><button class="btn soft" id="historyMoreBtn" style="display:none" onclick="renderSalesHistory(false)">Load more</button></div>
  </div>
 </section>
@@ -443,7 +443,7 @@
  <div class="formgrid" style="grid-template-columns:1fr">
  </div>
  <div class="formgrid">
-  <div class="field"><label>Product Name</label><input id="pf_name" placeholder="Product name"></div>
+  <div class="field"><label>Product Name</label><input id="pf_name" placeholder="Product name" oninput="productNameTyped()"></div>
   <div class="field"><label>Category</label><div style="display:flex;gap:6px"><select id="pf_category" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="quickAddMeta('categories','pf_category')">＋</button></div></div>
   <div class="field"><label>Brand</label><div style="display:flex;gap:6px"><select id="pf_brand" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="quickAddMeta('brands','pf_brand')">＋</button></div></div>
   <div class="field"><label>Unit</label><div style="display:flex;gap:6px"><select id="pf_unit" style="flex:1;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff"></select><button type="button" class="btn soft" onclick="quickAddMeta('units','pf_unit')">＋</button></div></div>
@@ -475,10 +475,12 @@
   </div>
  </div>
  <div id="pf_variableSection" style="display:none">
+  <div class="field"><label>Product Code (optional) — put before each variant SKU, e.g. KIAM → KIAM-16cm</label><input id="pf_variantCode" oninput="variantCodeChanged(true)" placeholder="e.g. KIAM" style="text-transform:uppercase"><small class="sub">Makes every SKU unique, so barcode scanning always finds the right product. Leave empty to use just the value (16cm).</small></div>
   <div class="field"><label>Variation values (comma separated, e.g. 100gm,150gm,200gm)</label>
    <div style="display:flex;gap:6px"><input id="pf_variationValues" placeholder="100gm,150gm,200gm" style="flex:1"><button type="button" class="btn soft" onclick="generateVariationRows()">Generate Rows</button></div>
+   <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn soft" onclick="addSingleVariationRow()">＋ Add one variant</button><span class="sub">New variants are added below — existing ones are kept. Use 🗑 to remove a single variant. SKU is filled automatically from the value.</span></div>
   </div>
-  <div class="tablewrap" style="margin-top:10px"><table class="table"><thead><tr><th>Value</th><th>SKU</th><th>Purchase</th><th>Sell</th><th>Stock</th><th></th></tr></thead><tbody id="pf_variationRows"></tbody></table></div>
+  <div class="tablewrap" style="margin-top:10px"><table class="table"><thead><tr><th></th><th>Value</th><th>SKU</th><th>Purchase</th><th>Sell</th><th>Stock</th></tr></thead><tbody id="pf_variationRows"></tbody></table></div>
  </div>
  <div class="modalBtns" style="margin-top:16px"><button class="btn soft" onclick="closeProductFormModal()">Cancel</button><button class="btn primary" onclick="saveProductForm()">Save</button></div>
 </div></div>
